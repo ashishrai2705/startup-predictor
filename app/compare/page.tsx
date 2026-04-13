@@ -1,16 +1,29 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
+import { SWOTGrid } from "@/components/analysis/swot-grid"
+import { ScoreGauge } from "@/components/shared/score-gauge"
+import { MarketSizeCards } from "@/components/analysis/market-size-cards"
+import { CompetitorCards } from "@/components/analysis/competitor-cards"
+import { EmptyState } from "@/components/shared/empty-state"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Scale, Sparkles, AlertCircle, CheckCircle, CheckCircle2, AlertTriangle, Target } from "lucide-react"
+import {
+  Scale, Sparkles, AlertCircle, CheckCircle, CheckCircle2,
+  AlertTriangle, Target, Brain, BookOpen, ChevronDown
+} from "lucide-react"
+import { SavedIdea, LS_SAVED_IDEAS } from "@/types/analysis"
+import { cn } from "@/lib/utils"
+
+/* ─── Types ──────────────────────────────────────────────────────────────── */
 
 interface PredictionResponse {
   successProbability: number
-  riskLevel: 'low' | 'medium' | 'high'
+  riskLevel: "low" | "medium" | "high"
   breakdown: {
     fundingScore: number
     teamScore: number
@@ -42,52 +55,274 @@ interface ComparisonResult {
   startupB: PredictionResponse
 }
 
+/* ─── Helpers ─────────────────────────────────────────────────────────────── */
+
 const formatCurrency = (value: number): string => {
   if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`
   if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`
   return `$${value}`
 }
 
-const getRiskColor = (riskLevel: 'low' | 'medium' | 'high'): string => {
+const getRiskColor = (riskLevel: "low" | "medium" | "high"): string => {
   switch (riskLevel) {
-    case 'low':
-      return 'bg-green-500/30 text-green-200 border border-green-400/50'
-    case 'medium':
-      return 'bg-yellow-500/30 text-yellow-200 border border-yellow-400/50'
-    case 'high':
-      return 'bg-red-500/30 text-red-200 border border-red-400/50'
+    case "low": return "bg-emerald-500/20 text-emerald-200 border border-emerald-400/40"
+    case "medium": return "bg-amber-500/20 text-amber-200 border border-amber-400/40"
+    case "high": return "bg-red-500/20 text-red-200 border border-red-400/40"
   }
 }
 
-export default function ComparePage() {
+/* ─── AI Compare Tab ──────────────────────────────────────────────────────── */
+
+function AICompareTab() {
+  const [ideas, setIdeas] = useState<SavedIdea[]>([])
+  const [idA, setIdA] = useState("")
+  const [idB, setIdB] = useState("")
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+    const raw = localStorage.getItem(LS_SAVED_IDEAS)
+    if (raw) {
+      const saved: SavedIdea[] = JSON.parse(raw)
+      setIdeas(saved)
+      // Pre-select from ideas page if available
+      const storedA = localStorage.getItem("compareIdeaA")
+      const storedB = localStorage.getItem("compareIdeaB")
+      if (storedA && saved.find(i => i.id === storedA)) setIdA(storedA)
+      if (storedB && saved.find(i => i.id === storedB)) setIdB(storedB)
+      localStorage.removeItem("compareIdeaA")
+      localStorage.removeItem("compareIdeaB")
+    }
+  }, [])
+
+  if (!isMounted) return null
+
+  const ideaA = ideas.find(i => i.id === idA)
+  const ideaB = ideas.find(i => i.id === idB)
+  const canCompare = ideaA && ideaB && idA !== idB
+  const scoreA = ideaA?.analysis.viabilityScore ?? 0
+  const scoreB = ideaB?.analysis.viabilityScore ?? 0
+  const winner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "tie"
+
+  if (ideas.length === 0) {
+    return (
+      <EmptyState
+        icon={BookOpen}
+        title="No Saved Ideas Yet"
+        description="Save at least 2 analyses from the Analyze page, then return here to compare them."
+        action={
+          <a href="/analyze" className="inline-flex px-5 py-2.5 rounded-xl bg-gradient-to-r
+            from-purple-600 to-indigo-600 text-white font-semibold text-sm
+            hover:from-purple-500 hover:to-indigo-500 transition-all shadow-lg shadow-purple-500/25">
+            Analyze an Idea
+          </a>
+        }
+      />
+    )
+  }
+
+  if (ideas.length < 2) {
+    return (
+      <EmptyState
+        icon={Scale}
+        title="Need at Least 2 Ideas"
+        description="You have only 1 saved idea. Analyze another idea to unlock AI comparison."
+        action={
+          <a href="/analyze" className="inline-flex px-5 py-2.5 rounded-xl bg-gradient-to-r
+            from-purple-600 to-indigo-600 text-white font-semibold text-sm
+            hover:from-purple-500 hover:to-indigo-500 transition-all shadow-lg shadow-purple-500/25">
+            Analyze Another Idea
+          </a>
+        }
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Selectors */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        {(["A", "B"] as const).map((side) => {
+          const selectedId = side === "A" ? idA : idB
+          const setSelected = side === "A" ? setIdA : setIdB
+          const idea = side === "A" ? ideaA : ideaB
+          const otherSelectedId = side === "A" ? idB : idA
+
+          return (
+            <div key={side} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black text-white",
+                  side === "A" ? "bg-purple-600" : "bg-indigo-600"
+                )}>
+                  {side}
+                </div>
+                <span className="font-semibold text-foreground">Startup {side}</span>
+              </div>
+
+              <div className="relative">
+                <select
+                  value={selectedId}
+                  onChange={e => setSelected(e.target.value)}
+                  className="w-full h-11 pl-4 pr-10 rounded-xl bg-white/5 border border-white/10
+                    text-foreground text-sm appearance-none cursor-pointer
+                    focus:outline-none focus:border-purple-500/50 transition-all"
+                >
+                  <option value="" className="bg-[#0f0a1e]">— Select a saved idea —</option>
+                  {ideas
+                    .filter(i => i.id !== otherSelectedId)
+                    .map(i => (
+                      <option key={i.id} value={i.id} className="bg-[#0f0a1e]">
+                        {i.ideaName} ({i.industry}) — {i.analysis.viabilityScore}/10
+                      </option>
+                    ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              </div>
+
+              {idea && (
+                <div className="mt-3 rounded-xl bg-white/5 border border-white/10 px-4 py-3">
+                  <p className="text-sm font-semibold text-foreground">{idea.ideaName}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{idea.industry} · Score: {idea.analysis.viabilityScore}/10</p>
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{idea.analysis.businessBrief}</p>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Comparison Results */}
+      {canCompare && ideaA && ideaB && (
+        <div className="space-y-6">
+          {/* Winner Banner */}
+          <div className={cn("rounded-2xl p-5 border text-center",
+            winner === "tie"
+              ? "border-white/20 bg-white/5"
+              : "border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-indigo-500/5"
+          )}>
+            {winner === "tie" ? (
+              <p className="text-lg font-bold text-foreground">🤝 It&apos;s a Tie!</p>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground mb-1">Higher Viability Score</p>
+                <p className="text-2xl font-black gradient-text">
+                  {winner === "A" ? ideaA.ideaName : ideaB.ideaName} wins!
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Score difference: {Math.abs(scoreA - scoreB)} point{Math.abs(scoreA - scoreB) !== 1 ? "s" : ""}
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Viability Gauges */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+            <h3 className="text-base font-semibold text-foreground mb-6 text-center">Viability Score</h3>
+            <div className="grid grid-cols-2 gap-6">
+              {[
+                { idea: ideaA, side: "A", isWinner: winner === "A" },
+                { idea: ideaB, side: "B", isWinner: winner === "B" },
+              ].map(({ idea, side, isWinner }) => (
+                <div key={side} className={cn("flex flex-col items-center rounded-xl p-4 border transition-all",
+                  isWinner ? "border-purple-500/40 bg-purple-500/5" : "border-white/10 bg-white/5"
+                )}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={cn("w-6 h-6 rounded-md text-xs font-black text-white flex items-center justify-center",
+                      side === "A" ? "bg-purple-600" : "bg-indigo-600"
+                    )}>
+                      {side}
+                    </div>
+                    <span className="text-sm font-semibold text-foreground truncate max-w-[140px]">{idea.ideaName}</span>
+                    {isWinner && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                  </div>
+                  <ScoreGauge score={idea.analysis.viabilityScore} size={140} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* SWOT Side-by-Side */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+            <h3 className="text-base font-semibold text-foreground mb-6">SWOT Comparison</h3>
+            <div className="grid lg:grid-cols-2 gap-6">
+              {[ideaA, ideaB].map((idea, idx) => (
+                <div key={idx}>
+                  <p className="text-sm font-semibold text-muted-foreground mb-3">{idea.ideaName}</p>
+                  <SWOTGrid swot={idea.analysis.swot} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Market Size Side-by-Side */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+            <h3 className="text-base font-semibold text-foreground mb-6">Market Size Comparison</h3>
+            <div className="space-y-6">
+              {[ideaA, ideaB].map((idea, idx) => (
+                <div key={idx}>
+                  <p className="text-sm font-semibold text-muted-foreground mb-3">{idea.ideaName}</p>
+                  <MarketSizeCards marketSize={idea.analysis.marketSize} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Competitors Side-by-Side */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+            <h3 className="text-base font-semibold text-foreground mb-6">Competitor Landscape</h3>
+            <div className="grid lg:grid-cols-2 gap-6">
+              {[ideaA, ideaB].map((idea, idx) => (
+                <div key={idx}>
+                  <p className="text-sm font-semibold text-muted-foreground mb-3">{idea.ideaName}</p>
+                  <CompetitorCards competitors={idea.analysis.competitors} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Recommendations Side-by-Side */}
+          <div className="grid lg:grid-cols-2 gap-6">
+            {[ideaA, ideaB].map((idea, idx) => (
+              <div key={idx} className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Brain className="w-4 h-4 text-indigo-400" />
+                  <p className="text-sm font-semibold text-foreground">{idea.ideaName}</p>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {idea.analysis.recommendation}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!canCompare && idA && idB && idA === idB && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          Please select two different ideas to compare.
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Numeric Compare Tab (original logic preserved) ─────────────────────── */
+
+function NumericCompareTab() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [comparisonResult, setComparisonResult] = useState<ComparisonResult | null>(null)
 
   const [startupA, setStartupA] = useState<StartupData>({
-    funding: "",
-    teamSize: "",
-    marketSize: "",
-    founderExperience: "",
+    funding: "", teamSize: "", marketSize: "", founderExperience: "",
   })
-
   const [startupB, setStartupB] = useState<StartupData>({
-    funding: "",
-    teamSize: "",
-    marketSize: "",
-    founderExperience: "",
+    funding: "", teamSize: "", marketSize: "", founderExperience: "",
   })
 
-  const handleInputChange = (
-    startup: 'A' | 'B',
-    field: keyof StartupData,
-    value: string
-  ) => {
-    if (startup === 'A') {
-      setStartupA(prev => ({ ...prev, [field]: value }))
-    } else {
-      setStartupB(prev => ({ ...prev, [field]: value }))
-    }
+  const handleInputChange = (startup: "A" | "B", field: keyof StartupData, value: string) => {
+    if (startup === "A") setStartupA(prev => ({ ...prev, [field]: value }))
+    else setStartupB(prev => ({ ...prev, [field]: value }))
   }
 
   const validateInputs = (data: StartupData): boolean => {
@@ -95,7 +330,6 @@ export default function ComparePage() {
     const teamSize = parseFloat(data.teamSize)
     const marketSize = parseFloat(data.marketSize)
     const founderExperience = parseFloat(data.founderExperience)
-
     return (
       !isNaN(funding) && funding > 0 &&
       !isNaN(teamSize) && teamSize > 0 &&
@@ -107,21 +341,11 @@ export default function ComparePage() {
   const handleCompare = async () => {
     setError(null)
     setComparisonResult(null)
-
-    // Validate inputs
-    if (!validateInputs(startupA)) {
-      setError("Please enter valid values for Startup A")
-      return
-    }
-    if (!validateInputs(startupB)) {
-      setError("Please enter valid values for Startup B")
-      return
-    }
-
+    if (!validateInputs(startupA)) { setError("Please enter valid values for Startup A"); return }
+    if (!validateInputs(startupB)) { setError("Please enter valid values for Startup B"); return }
     setIsLoading(true)
 
     try {
-      // Make both API calls in parallel
       const [responseA, responseB] = await Promise.all([
         fetch("/api/predict", {
           method: "POST",
@@ -145,22 +369,12 @@ export default function ComparePage() {
         }),
       ])
 
-      if (!responseA.ok) {
-        const errorData = await responseA.json()
-        throw new Error(errorData.error || "Failed to get prediction for Startup A")
-      }
-      if (!responseB.ok) {
-        const errorData = await responseB.json()
-        throw new Error(errorData.error || "Failed to get prediction for Startup B")
-      }
+      if (!responseA.ok) throw new Error((await responseA.json()).error || "Failed for Startup A")
+      if (!responseB.ok) throw new Error((await responseB.json()).error || "Failed for Startup B")
 
       const dataA = await responseA.json()
       const dataB = await responseB.json()
-
-      setComparisonResult({
-        startupA: dataA,
-        startupB: dataB,
-      })
+      setComparisonResult({ startupA: dataA, startupB: dataB })
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred during comparison")
     } finally {
@@ -168,588 +382,324 @@ export default function ComparePage() {
     }
   }
 
-  const getWinner = (): 'A' | 'B' | 'tie' => {
-    if (!comparisonResult) return 'tie'
-    const probA = comparisonResult.startupA.successProbability
-    const probB = comparisonResult.startupB.successProbability
-    if (probA > probB) return 'A'
-    if (probB > probA) return 'B'
-    return 'tie'
+  const getWinner = (): "A" | "B" | "tie" => {
+    if (!comparisonResult) return "tie"
+    const { startupA: a, startupB: b } = comparisonResult
+    if (a.successProbability > b.successProbability) return "A"
+    if (b.successProbability > a.successProbability) return "B"
+    return "tie"
   }
 
-  const isWinner = (startup: 'A' | 'B'): boolean => {
-    return getWinner() === startup
-  }
+  const isWinner = (s: "A" | "B") => getWinner() === s
+
+  const inputFields = [
+    { label: "Funding Amount ($)", field: "funding" as keyof StartupData, placeholder: "e.g. 1000000" },
+    { label: "Team Size", field: "teamSize" as keyof StartupData, placeholder: "e.g. 8" },
+    { label: "Market Size ($)", field: "marketSize" as keyof StartupData, placeholder: "e.g. 500000000" },
+    { label: "Founder Experience (yrs)", field: "founderExperience" as keyof StartupData, placeholder: "e.g. 5" },
+  ]
+
+  return (
+    <div>
+      {error && (
+        <Alert className="mb-6 border-red-400/40 bg-red-500/10">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="text-red-200 ml-2">{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {!comparisonResult ? (
+        <div>
+          <div className="grid lg:grid-cols-2 gap-6 mb-6">
+            {(["A", "B"] as const).map(side => {
+              const data = side === "A" ? startupA : startupB
+              return (
+                <div key={side} className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+                  <div className="flex items-center gap-2 mb-5">
+                    <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black text-white",
+                      side === "A" ? "bg-purple-600" : "bg-indigo-600"
+                    )}>
+                      {side}
+                    </div>
+                    <h2 className="text-base font-bold text-foreground">Startup {side}</h2>
+                  </div>
+                  <div className="space-y-4">
+                    {inputFields.map(({ label, field, placeholder }) => (
+                      <div key={field}>
+                        <Label className="text-muted-foreground text-xs mb-1.5 block">{label}</Label>
+                        <Input
+                          type="number"
+                          placeholder={placeholder}
+                          value={data[field]}
+                          onChange={e => handleInputChange(side, field, e.target.value)}
+                          className="bg-white/5 border-white/10 text-foreground placeholder:text-muted-foreground rounded-xl focus:border-purple-500/50"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex justify-center">
+            <Button
+              onClick={handleCompare}
+              disabled={isLoading}
+              className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500
+                text-white font-semibold rounded-xl transition-all shadow-lg shadow-purple-500/25
+                hover:shadow-purple-500/40 disabled:opacity-50 border border-purple-500/30"
+            >
+              {isLoading ? "Comparing…" : "Compare Startups"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <Button
+            onClick={() => {
+              setComparisonResult(null)
+              setStartupA({ funding: "", teamSize: "", marketSize: "", founderExperience: "" })
+              setStartupB({ funding: "", teamSize: "", marketSize: "", founderExperience: "" })
+            }}
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-foreground rounded-xl border border-white/20"
+          >
+            ← New Comparison
+          </Button>
+
+          {/* Metrics Table */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 overflow-x-auto">
+            <h3 className="text-base font-semibold text-foreground mb-5">Input Metrics</h3>
+            <table className="w-full min-w-[400px]">
+              <thead>
+                <tr className="border-b border-white/10">
+                  <th className="text-left py-3 px-4 text-muted-foreground text-xs font-medium">Metric</th>
+                  <th className={cn("text-center py-3 px-4 text-sm font-bold", isWinner("A") ? "text-purple-400" : "text-foreground")}>
+                    Startup A {isWinner("A") && "🏆"}
+                  </th>
+                  <th className={cn("text-center py-3 px-4 text-sm font-bold", isWinner("B") ? "text-indigo-400" : "text-foreground")}>
+                    Startup B {isWinner("B") && "🏆"}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { label: "Funding", valA: formatCurrency(parseFloat(startupA.funding)), valB: formatCurrency(parseFloat(startupB.funding)) },
+                  { label: "Team Size", valA: `${Math.round(parseFloat(startupA.teamSize))} people`, valB: `${Math.round(parseFloat(startupB.teamSize))} people` },
+                  { label: "Market Size", valA: formatCurrency(parseFloat(startupA.marketSize)), valB: formatCurrency(parseFloat(startupB.marketSize)) },
+                  { label: "Founder Experience", valA: `${Math.round(parseFloat(startupA.founderExperience))} yrs`, valB: `${Math.round(parseFloat(startupB.founderExperience))} yrs` },
+                ].map(row => (
+                  <tr key={row.label} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                    <td className="py-3 px-4 text-muted-foreground text-sm">{row.label}</td>
+                    <td className="py-3 px-4 text-center text-foreground font-semibold text-sm">{row.valA}</td>
+                    <td className="py-3 px-4 text-center text-foreground font-semibold text-sm">{row.valB}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Results Cards */}
+          <div className="grid lg:grid-cols-2 gap-6">
+            {(["A", "B"] as const).map(side => {
+              const res = side === "A" ? comparisonResult.startupA : comparisonResult.startupB
+              const winner = isWinner(side)
+              return (
+                <div key={side} className={cn(
+                  "rounded-2xl border backdrop-blur-xl p-6 transition-all",
+                  winner
+                    ? "border-emerald-500/40 bg-emerald-500/5"
+                    : "border-white/10 bg-white/[0.03]"
+                )}>
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("w-7 h-7 rounded-lg text-xs font-black text-white flex items-center justify-center",
+                        side === "A" ? "bg-purple-600" : "bg-indigo-600"
+                      )}>
+                        {side}
+                      </div>
+                      <h3 className="text-base font-bold text-foreground">Startup {side}</h3>
+                    </div>
+                    {winner && (
+                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-xs text-emerald-200 font-semibold">Winner</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-center mb-5 p-5 rounded-xl bg-white/5 border border-white/10">
+                    <p className="text-muted-foreground text-xs mb-1">Success Probability</p>
+                    <p className="text-5xl font-black text-purple-400">{res.successProbability}%</p>
+                  </div>
+
+                  <div className="mb-5">
+                    <p className="text-xs text-muted-foreground mb-2">Risk Level</p>
+                    <span className={cn("inline-block px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide", getRiskColor(res.riskLevel))}>
+                      {res.riskLevel}
+                    </span>
+                  </div>
+
+                  <div className="space-y-3 pt-4 border-t border-white/10">
+                    <p className="text-xs font-semibold text-muted-foreground">Score Breakdown</p>
+                    {[
+                      { label: "Funding", val: res.breakdown.fundingScore, color: "from-purple-500 to-indigo-500" },
+                      { label: "Team", val: res.breakdown.teamScore, color: "from-indigo-500 to-blue-500" },
+                      { label: "Market", val: res.breakdown.marketScore, color: "from-cyan-500 to-teal-500" },
+                      { label: "Experience", val: res.breakdown.experienceScore, color: "from-emerald-500 to-green-500" },
+                    ].map(item => (
+                      <div key={item.label}>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs text-muted-foreground">{item.label}</span>
+                          <span className="text-xs font-semibold text-foreground">{item.val}/100</span>
+                        </div>
+                        <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className={cn("h-full bg-gradient-to-r rounded-full", item.color)}
+                            style={{ width: `${item.val}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Report */}
+                  <div className="mt-5 pt-4 border-t border-white/10 space-y-3">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <p className="text-xs font-semibold text-foreground">Strengths</p>
+                      </div>
+                      {res.report.strengths.map((s, i) => (
+                        <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground mb-1">
+                          <span className="w-1 h-1 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0" />
+                          {s}
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+                        <p className="text-xs font-semibold text-foreground">Risks</p>
+                      </div>
+                      {res.report.risks.map((r, i) => (
+                        <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground mb-1">
+                          <span className="w-1 h-1 rounded-full bg-red-400 mt-1.5 flex-shrink-0" />
+                          {r}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="rounded-lg bg-indigo-500/10 border border-indigo-500/20 p-3">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Target className="w-3.5 h-3.5 text-indigo-400" />
+                        <p className="text-xs font-semibold text-foreground">Recommendation</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{res.report.recommendation}</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Key Insights */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+            <div className="flex items-center gap-2 mb-5">
+              <Sparkles className="w-4 h-4 text-purple-400" />
+              <h3 className="text-base font-semibold text-foreground">Key Insights</h3>
+            </div>
+            <div className="space-y-4">
+              {[
+                {
+                  label: "Success Probability Gap",
+                  value: getWinner() !== "tie"
+                    ? `Startup ${getWinner()} has ${Math.abs(
+                        comparisonResult.startupA.successProbability - comparisonResult.startupB.successProbability
+                      ).toFixed(1)}% higher success probability.`
+                    : "Both startups have equal success probability.",
+                },
+                {
+                  label: "Risk Profile",
+                  value: `Startup A: ${comparisonResult.startupA.riskLevel} risk · Startup B: ${comparisonResult.startupB.riskLevel} risk`,
+                },
+                {
+                  label: "Funding Strength",
+                  value: comparisonResult.startupA.breakdown.fundingScore > comparisonResult.startupB.breakdown.fundingScore
+                    ? "Startup A has stronger funding relative to market."
+                    : "Startup B has stronger funding relative to market.",
+                },
+              ].map(item => (
+                <div key={item.label} className="flex gap-3">
+                  <Sparkles className="w-4 h-4 text-purple-400 flex-shrink-0 mt-1" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground mb-0.5">{item.label}</p>
+                    <p className="text-sm text-muted-foreground">{item.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Main Compare Page ───────────────────────────────────────────────────── */
+
+function ComparePageInner() {
+  const searchParams = useSearchParams()
+  const [mode, setMode] = useState<"numeric" | "ai">(
+    searchParams.get("mode") === "ai" ? "ai" : "numeric"
+  )
 
   return (
     <DashboardLayout>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-400/30 mb-4">
-            <Scale className="w-4 h-4 text-cyan-400" />
-            <span className="text-sm text-white/70">Side-by-Side Analysis</span>
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/10 border border-purple-500/30 mb-4">
+            <Scale className="w-4 h-4 text-purple-400" />
+            <span className="text-sm text-purple-300 font-medium">Side-by-Side Analysis</span>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-3">Compare Startups</h1>
-          <p className="text-white/60 max-w-2xl mx-auto">
-            Compare two startups side-by-side to analyze their success probability and key metrics.
+          <h1 className="text-3xl font-black text-foreground mb-3">Compare Startups</h1>
+          <p className="text-muted-foreground max-w-xl mx-auto text-sm">
+            Compare two startups side-by-side — using saved AI analyses or raw numeric inputs.
           </p>
         </div>
 
-        {/* Error Alert */}
-        {error && (
-          <Alert className="mb-8 border-red-400/50 bg-red-500/10">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="text-red-200 ml-2">
-              {error}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Input Section */}
-        {!comparisonResult && (
-          <div>
-            <div className="grid lg:grid-cols-2 gap-8 mb-8">
-              {/* Startup A Inputs */}
-              <div className="rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-8 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl">
-                <h2 className="text-xl font-bold text-white mb-6">Startup A</h2>
-                <div className="space-y-6">
-                  <div>
-                    <Label htmlFor="fundingA" className="text-white/70 text-sm mb-2 block">
-                      Funding Amount ($)
-                    </Label>
-                    <Input
-                      id="fundingA"
-                      type="number"
-                      placeholder="e.g., 1000000"
-                      value={startupA.funding}
-                      onChange={(e) => handleInputChange('A', 'funding', e.target.value)}
-                      className="bg-white/5 border border-white/10 text-white placeholder:text-white/30 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="teamSizeA" className="text-white/70 text-sm mb-2 block">
-                      Team Size
-                    </Label>
-                    <Input
-                      id="teamSizeA"
-                      type="number"
-                      placeholder="e.g., 8"
-                      value={startupA.teamSize}
-                      onChange={(e) => handleInputChange('A', 'teamSize', e.target.value)}
-                      className="bg-white/5 border border-white/10 text-white placeholder:text-white/30 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="marketSizeA" className="text-white/70 text-sm mb-2 block">
-                      Market Size ($)
-                    </Label>
-                    <Input
-                      id="marketSizeA"
-                      type="number"
-                      placeholder="e.g., 500000000"
-                      value={startupA.marketSize}
-                      onChange={(e) => handleInputChange('A', 'marketSize', e.target.value)}
-                      className="bg-white/5 border border-white/10 text-white placeholder:text-white/30 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="experienceA" className="text-white/70 text-sm mb-2 block">
-                      Founder Experience (years)
-                    </Label>
-                    <Input
-                      id="experienceA"
-                      type="number"
-                      placeholder="e.g., 5"
-                      value={startupA.founderExperience}
-                      onChange={(e) => handleInputChange('A', 'founderExperience', e.target.value)}
-                      className="bg-white/5 border border-white/10 text-white placeholder:text-white/30 rounded-lg"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Startup B Inputs */}
-              <div className="rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-8 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl">
-                <h2 className="text-xl font-bold text-white mb-6">Startup B</h2>
-                <div className="space-y-6">
-                  <div>
-                    <Label htmlFor="fundingB" className="text-white/70 text-sm mb-2 block">
-                      Funding Amount ($)
-                    </Label>
-                    <Input
-                      id="fundingB"
-                      type="number"
-                      placeholder="e.g., 500000"
-                      value={startupB.funding}
-                      onChange={(e) => handleInputChange('B', 'funding', e.target.value)}
-                      className="bg-white/5 border border-white/10 text-white placeholder:text-white/30 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="teamSizeB" className="text-white/70 text-sm mb-2 block">
-                      Team Size
-                    </Label>
-                    <Input
-                      id="teamSizeB"
-                      type="number"
-                      placeholder="e.g., 3"
-                      value={startupB.teamSize}
-                      onChange={(e) => handleInputChange('B', 'teamSize', e.target.value)}
-                      className="bg-white/5 border border-white/10 text-white placeholder:text-white/30 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="marketSizeB" className="text-white/70 text-sm mb-2 block">
-                      Market Size ($)
-                    </Label>
-                    <Input
-                      id="marketSizeB"
-                      type="number"
-                      placeholder="e.g., 20000000"
-                      value={startupB.marketSize}
-                      onChange={(e) => handleInputChange('B', 'marketSize', e.target.value)}
-                      className="bg-white/5 border border-white/10 text-white placeholder:text-white/30 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="experienceB" className="text-white/70 text-sm mb-2 block">
-                      Founder Experience (years)
-                    </Label>
-                    <Input
-                      id="experienceB"
-                      type="number"
-                      placeholder="e.g., 1"
-                      value={startupB.founderExperience}
-                      onChange={(e) => handleInputChange('B', 'founderExperience', e.target.value)}
-                      className="bg-white/5 border border-white/10 text-white placeholder:text-white/30 rounded-lg"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Compare Button */}
-            <div className="flex justify-center">
-              <Button
-                onClick={handleCompare}
-                disabled={isLoading}
-                className="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-semibold rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl"
+        {/* Mode Toggle */}
+        <div className="flex justify-center mb-8">
+          <div className="inline-flex rounded-xl border border-white/10 bg-white/5 p-1 gap-1">
+            {([
+              { key: "ai", label: "🤖 Compare AI Ideas", desc: "Saved analyses" },
+              { key: "numeric", label: "📊 Compare by Numbers", desc: "ML prediction" },
+            ] as const).map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setMode(tab.key)}
+                className={cn(
+                  "px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200",
+                  mode === tab.key
+                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/20"
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                )}
               >
-                {isLoading ? 'Comparing...' : 'Compare Startups'}
-              </Button>
-            </div>
+                {tab.label}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
 
-        {/* Comparison Results */}
-        {comparisonResult && (
-          <div className="space-y-8">
-            {/* Back Button */}
-            <div>
-              <Button
-                onClick={() => {
-                  setComparisonResult(null)
-                  setStartupA({ funding: "", teamSize: "", marketSize: "", founderExperience: "" })
-                  setStartupB({ funding: "", teamSize: "", marketSize: "", founderExperience: "" })
-                }}
-                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all duration-300 border border-white/20"
-              >
-                ← New Comparison
-              </Button>
-            </div>
-
-            {/* Metrics Comparison Table */}
-            <div className="rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-8 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl overflow-x-auto">
-              <h2 className="text-2xl font-bold text-white mb-8">Input Metrics</h2>
-              <div className="min-w-full">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-white/20">
-                      <th className="text-left py-3 px-4 text-white/60 text-sm font-medium">Metric</th>
-                      <th className={`text-center py-3 px-4 text-white font-semibold ${isWinner('A') ? 'text-cyan-400' : ''}`}>
-                        Startup A
-                      </th>
-                      <th className={`text-center py-3 px-4 text-white font-semibold ${isWinner('B') ? 'text-cyan-400' : ''}`}>
-                        Startup B
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-white/10 hover:bg-white/5 transition-colors">
-                      <td className="py-4 px-4 text-white/80">Funding</td>
-                      <td className="py-4 px-4 text-center text-white font-semibold">
-                        {formatCurrency(parseFloat(startupA.funding))}
-                      </td>
-                      <td className="py-4 px-4 text-center text-white font-semibold">
-                        {formatCurrency(parseFloat(startupB.funding))}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-white/10 hover:bg-white/5 transition-colors">
-                      <td className="py-4 px-4 text-white/80">Team Size</td>
-                      <td className="py-4 px-4 text-center text-white font-semibold">
-                        {Math.round(parseFloat(startupA.teamSize))} people
-                      </td>
-                      <td className="py-4 px-4 text-center text-white font-semibold">
-                        {Math.round(parseFloat(startupB.teamSize))} people
-                      </td>
-                    </tr>
-                    <tr className="border-b border-white/10 hover:bg-white/5 transition-colors">
-                      <td className="py-4 px-4 text-white/80">Market Size</td>
-                      <td className="py-4 px-4 text-center text-white font-semibold">
-                        {formatCurrency(parseFloat(startupA.marketSize))}
-                      </td>
-                      <td className="py-4 px-4 text-center text-white font-semibold">
-                        {formatCurrency(parseFloat(startupB.marketSize))}
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-white/5 transition-colors">
-                      <td className="py-4 px-4 text-white/80">Founder Experience</td>
-                      <td className="py-4 px-4 text-center text-white font-semibold">
-                        {Math.round(parseFloat(startupA.founderExperience))} years
-                      </td>
-                      <td className="py-4 px-4 text-center text-white font-semibold">
-                        {Math.round(parseFloat(startupB.founderExperience))} years
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Results Comparison Cards */}
-            <div className="grid lg:grid-cols-2 gap-8">
-              {/* Startup A Results */}
-              <div className={`rounded-2xl border backdrop-blur-xl p-8 transition-all duration-300 shadow-2xl ${
-                isWinner('A')
-                  ? 'border-green-400/50 bg-green-500/10 hover:border-green-400/80 hover:bg-green-500/15'
-                  : 'border-cyan-400/30 bg-white/10 hover:border-cyan-400/60 hover:bg-cyan-500/10'
-              }`}>
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-2xl font-bold text-white">Startup A</h3>
-                  {isWinner('A') && (
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/20 border border-green-400/50">
-                      <CheckCircle className="w-4 h-4 text-green-400" />
-                      <span className="text-sm text-green-200 font-semibold">Winner</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Success Probability */}
-                <div className="mb-8 p-6 rounded-xl bg-white/5 border border-white/10">
-                  <p className="text-white/60 text-sm mb-3">Success Probability</p>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-5xl font-bold text-cyan-400">
-                      {comparisonResult.startupA.successProbability}%
-                    </span>
-                  </div>
-                </div>
-
-                {/* Risk Level */}
-                <div className="mb-6">
-                  <p className="text-white/60 text-sm mb-3">Risk Level</p>
-                  <div className={`inline-block px-6 py-2 rounded-full text-sm font-semibold uppercase tracking-wide ${
-                    getRiskColor(comparisonResult.startupA.riskLevel)
-                  }`}>
-                    {comparisonResult.startupA.riskLevel}
-                  </div>
-                </div>
-
-                {/* Breakdown Scores */}
-                <div className="space-y-3 pt-6 border-t border-white/10">
-                  <p className="text-white/60 text-sm font-semibold">Score Breakdown</p>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-white/70">Funding</span>
-                      <span className="text-white font-semibold">{comparisonResult.startupA.breakdown.fundingScore}/100</span>
-                    </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-cyan-500 to-blue-500"
-                        style={{ width: `${comparisonResult.startupA.breakdown.fundingScore}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-3 pt-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-white/70">Team</span>
-                      <span className="text-white font-semibold">{comparisonResult.startupA.breakdown.teamScore}/100</span>
-                    </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
-                        style={{ width: `${comparisonResult.startupA.breakdown.teamScore}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-3 pt-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-white/70">Market</span>
-                      <span className="text-white font-semibold">{comparisonResult.startupA.breakdown.marketScore}/100</span>
-                    </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-teal-500 to-cyan-500"
-                        style={{ width: `${comparisonResult.startupA.breakdown.marketScore}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-3 pt-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-white/70">Experience</span>
-                      <span className="text-white font-semibold">{comparisonResult.startupA.breakdown.experienceScore}/100</span>
-                    </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-orange-500 to-pink-500"
-                        style={{ width: `${comparisonResult.startupA.breakdown.experienceScore}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Startup B Results */}
-              <div className={`rounded-2xl border backdrop-blur-xl p-8 transition-all duration-300 shadow-2xl ${
-                isWinner('B')
-                  ? 'border-green-400/50 bg-green-500/10 hover:border-green-400/80 hover:bg-green-500/15'
-                  : 'border-cyan-400/30 bg-white/10 hover:border-cyan-400/60 hover:bg-cyan-500/10'
-              }`}>
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-2xl font-bold text-white">Startup B</h3>
-                  {isWinner('B') && (
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/20 border border-green-400/50">
-                      <CheckCircle className="w-4 h-4 text-green-400" />
-                      <span className="text-sm text-green-200 font-semibold">Winner</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Success Probability */}
-                <div className="mb-8 p-6 rounded-xl bg-white/5 border border-white/10">
-                  <p className="text-white/60 text-sm mb-3">Success Probability</p>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-5xl font-bold text-cyan-400">
-                      {comparisonResult.startupB.successProbability}%
-                    </span>
-                  </div>
-                </div>
-
-                {/* Risk Level */}
-                <div className="mb-6">
-                  <p className="text-white/60 text-sm mb-3">Risk Level</p>
-                  <div className={`inline-block px-6 py-2 rounded-full text-sm font-semibold uppercase tracking-wide ${
-                    getRiskColor(comparisonResult.startupB.riskLevel)
-                  }`}>
-                    {comparisonResult.startupB.riskLevel}
-                  </div>
-                </div>
-
-                {/* Breakdown Scores */}
-                <div className="space-y-3 pt-6 border-t border-white/10">
-                  <p className="text-white/60 text-sm font-semibold">Score Breakdown</p>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-white/70">Funding</span>
-                      <span className="text-white font-semibold">{comparisonResult.startupB.breakdown.fundingScore}/100</span>
-                    </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-cyan-500 to-blue-500"
-                        style={{ width: `${comparisonResult.startupB.breakdown.fundingScore}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-3 pt-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-white/70">Team</span>
-                      <span className="text-white font-semibold">{comparisonResult.startupB.breakdown.teamScore}/100</span>
-                    </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
-                        style={{ width: `${comparisonResult.startupB.breakdown.teamScore}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-3 pt-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-white/70">Market</span>
-                      <span className="text-white font-semibold">{comparisonResult.startupB.breakdown.marketScore}/100</span>
-                    </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-teal-500 to-cyan-500"
-                        style={{ width: `${comparisonResult.startupB.breakdown.marketScore}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-3 pt-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-white/70">Experience</span>
-                      <span className="text-white font-semibold">{comparisonResult.startupB.breakdown.experienceScore}/100</span>
-                    </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-orange-500 to-pink-500"
-                        style={{ width: `${comparisonResult.startupB.breakdown.experienceScore}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* AI Investor Reports */}
-            <div className="grid lg:grid-cols-2 gap-8">
-              {/* Startup A Report */}
-              <div className="rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-8 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl">
-                <div className="flex items-center gap-2 mb-6">
-                  <Target className="w-5 h-5 text-cyan-400" />
-                  <h3 className="text-xl font-bold text-white">Startup A - Report</h3>
-                </div>
-
-                {/* Recommendation */}
-                <div className="mb-6 rounded-xl border border-blue-400/30 bg-blue-500/10 p-4">
-                  <p className="text-blue-200 text-sm leading-relaxed">
-                    {comparisonResult.startupA.report.recommendation}
-                  </p>
-                </div>
-
-                {/* Strengths */}
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <CheckCircle2 className="w-4 h-4 text-green-400" />
-                    <p className="text-white/80 text-sm font-semibold">Strengths</p>
-                  </div>
-                  <div className="space-y-2">
-                    {comparisonResult.startupA.report.strengths.map((strength, idx) => (
-                      <div key={idx} className="flex items-start gap-2 text-white/70 text-sm">
-                        <div className="w-1 h-1 rounded-full bg-green-400 mt-1.5 flex-shrink-0" />
-                        <span>{strength}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Risks */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <AlertCircle className="w-4 h-4 text-red-400" />
-                    <p className="text-white/80 text-sm font-semibold">Risks</p>
-                  </div>
-                  <div className="space-y-2">
-                    {comparisonResult.startupA.report.risks.map((risk, idx) => (
-                      <div key={idx} className="flex items-start gap-2 text-white/70 text-sm">
-                        <div className="w-1 h-1 rounded-full bg-red-400 mt-1.5 flex-shrink-0" />
-                        <span>{risk}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Startup B Report */}
-              <div className="rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-8 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl">
-                <div className="flex items-center gap-2 mb-6">
-                  <Target className="w-5 h-5 text-cyan-400" />
-                  <h3 className="text-xl font-bold text-white">Startup B - Report</h3>
-                </div>
-
-                {/* Recommendation */}
-                <div className="mb-6 rounded-xl border border-blue-400/30 bg-blue-500/10 p-4">
-                  <p className="text-blue-200 text-sm leading-relaxed">
-                    {comparisonResult.startupB.report.recommendation}
-                  </p>
-                </div>
-
-                {/* Strengths */}
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <CheckCircle2 className="w-4 h-4 text-green-400" />
-                    <p className="text-white/80 text-sm font-semibold">Strengths</p>
-                  </div>
-                  <div className="space-y-2">
-                    {comparisonResult.startupB.report.strengths.map((strength, idx) => (
-                      <div key={idx} className="flex items-start gap-2 text-white/70 text-sm">
-                        <div className="w-1 h-1 rounded-full bg-green-400 mt-1.5 flex-shrink-0" />
-                        <span>{strength}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Risks */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <AlertCircle className="w-4 h-4 text-red-400" />
-                    <p className="text-white/80 text-sm font-semibold">Risks</p>
-                  </div>
-                  <div className="space-y-2">
-                    {comparisonResult.startupB.report.risks.map((risk, idx) => (
-                      <div key={idx} className="flex items-start gap-2 text-white/70 text-sm">
-                        <div className="w-1 h-1 rounded-full bg-red-400 mt-1.5 flex-shrink-0" />
-                        <span>{risk}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Insights Section */}
-            <div className="rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-8 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl">
-              <h3 className="text-xl font-bold text-white mb-6">Key Insights</h3>
-              <div className="space-y-4">
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0">
-                    <Sparkles className="w-5 h-5 text-cyan-400 mt-1" />
-                  </div>
-                  <div>
-                    <p className="text-white font-semibold mb-1">Success Probability Gap</p>
-                    <p className="text-white/70">
-                      {getWinner() !== 'tie'
-                        ? `Startup ${getWinner()} has ${Math.abs(
-                            comparisonResult.startupA.successProbability -
-                            comparisonResult.startupB.successProbability
-                          ).toFixed(1)}% higher success probability.`
-                        : "Both startups have equal success probability."}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0">
-                    <Sparkles className="w-5 h-5 text-cyan-400 mt-1" />
-                  </div>
-                  <div>
-                    <p className="text-white font-semibold mb-1">Risk Profile</p>
-                    <p className="text-white/70">
-                      Startup A carries a {comparisonResult.startupA.riskLevel} risk level, while Startup B carries a{" "}
-                      {comparisonResult.startupB.riskLevel} risk level.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0">
-                    <Sparkles className="w-5 h-5 text-cyan-400 mt-1" />
-                  </div>
-                  <div>
-                    <p className="text-white font-semibold mb-1">Strongest Factors</p>
-                    <p className="text-white/70">
-                      {comparisonResult.startupA.breakdown.fundingScore > comparisonResult.startupB.breakdown.fundingScore
-                        ? "Startup A leads in funding strength. "
-                        : "Startup B leads in funding strength. "}
-                      {comparisonResult.startupA.breakdown.marketScore > comparisonResult.startupB.breakdown.marketScore
-                        ? "Startup A has a larger addressable market."
-                        : "Startup B has a larger addressable market."}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Content */}
+        {mode === "ai" ? <AICompareTab /> : <NumericCompareTab />}
       </div>
     </DashboardLayout>
+  )
+}
+
+export default function ComparePage() {
+  return (
+    <Suspense fallback={<DashboardLayout><div className="max-w-6xl mx-auto animate-pulse"><div className="h-8 bg-white/5 rounded-xl mb-4 w-48 mx-auto" /><div className="h-64 bg-white/5 rounded-2xl" /></div></DashboardLayout>}>
+      <ComparePageInner />
+    </Suspense>
   )
 }

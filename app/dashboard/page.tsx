@@ -1,17 +1,19 @@
 "use client"
 
-import Image from "next/image"
+import { useEffect, useState } from "react"
+import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { TrendingUp, Users, Zap, Clock, ArrowUpRight, ArrowDownRight } from "lucide-react"
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
+import {
+  TrendingUp, Users, Zap, Clock, ArrowUpRight, ArrowDownRight,
+  Sparkles, Target, BookOpen, BarChart3,
+} from "lucide-react"
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell,
+} from "recharts"
+import { SavedIdea, LS_SAVED_IDEAS } from "@/types/analysis"
 
-const successDistributionData = [
-  { name: "0-20%", value: 15, fill: "var(--chart-5)" },
-  { name: "20-40%", value: 25, fill: "var(--chart-3)" },
-  { name: "40-60%", value: 30, fill: "var(--chart-2)" },
-  { name: "60-80%", value: 20, fill: "var(--chart-1)" },
-  { name: "80-100%", value: 10, fill: "var(--chart-4)" },
-]
+// ─── Static chart data ────────────────────────────────────────────────────────
 
 const fundingVsSuccessData = [
   { funding: "$0-1M", success: 35 },
@@ -22,74 +24,169 @@ const fundingVsSuccessData = [
   { funding: "$50M+", success: 85 },
 ]
 
-const recentPredictions = [
-  { name: "TechVenture AI", probability: 78, trend: "up", date: "2 hours ago" },
-  { name: "GreenEnergy Co", probability: 65, trend: "up", date: "5 hours ago" },
-  { name: "HealthPlus", probability: 42, trend: "down", date: "1 day ago" },
-  { name: "FinanceFlow", probability: 89, trend: "up", date: "1 day ago" },
-  { name: "EduLearn", probability: 55, trend: "down", date: "2 days ago" },
+const PIE_COLORS = [
+  "var(--chart-5)",
+  "var(--chart-3)",
+  "var(--chart-2)",
+  "var(--chart-1)",
+  "var(--chart-4)",
 ]
 
-const stats = [
-  { 
-    title: "Total Analyzed", 
-    value: "1,284", 
-    change: "+12.5%", 
-    trend: "up",
-    icon: Users,
-    description: "startups this month"
-  },
-  { 
-    title: "Avg Success Rate", 
-    value: "64.2%", 
-    change: "+3.2%", 
-    trend: "up",
-    icon: TrendingUp,
-    description: "across all predictions"
-  },
-  { 
-    title: "Top Factor", 
-    value: "Funding", 
-    change: "32% weight",
-    trend: "neutral",
-    icon: Zap,
-    description: "most influential"
-  },
-  { 
-    title: "Recent Predictions", 
-    value: "47", 
-    change: "+8",
-    trend: "up",
-    icon: Clock,
-    description: "in last 24 hours"
-  },
-]
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatDate(iso: string) {
+  const d = new Date(iso)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffH = Math.floor(diffMs / 3600000)
+  const diffD = Math.floor(diffH / 24)
+  if (diffH < 1) return "Just now"
+  if (diffH < 24) return `${diffH}h ago`
+  if (diffD === 1) return "1 day ago"
+  return `${diffD} days ago`
+}
+
+function getScoreColor(score: number) {
+  if (score >= 8) return "text-emerald-400"
+  if (score >= 6) return "text-purple-400"
+  if (score >= 4) return "text-amber-400"
+  return "text-red-400"
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const [savedIdeas, setSavedIdeas] = useState<SavedIdea[]>([])
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+    const raw = localStorage.getItem(LS_SAVED_IDEAS)
+    if (raw) setSavedIdeas(JSON.parse(raw))
+  }, [])
+
+  // Derived stats from real data
+  const totalAnalyzed = savedIdeas.length
+  const avgScore =
+    savedIdeas.length > 0
+      ? (savedIdeas.reduce((acc, i) => acc + i.analysis.viabilityScore, 0) / savedIdeas.length).toFixed(1)
+      : "—"
+
+  // Compute industry distribution for pie chart
+  const industryCounts: Record<string, number> = {}
+  savedIdeas.forEach((i) => {
+    industryCounts[i.industry] = (industryCounts[i.industry] || 0) + 1
+  })
+  const pieData = Object.entries(industryCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, value]) => ({ name, value }))
+
+  const recentIdeas = [...savedIdeas].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  ).slice(0, 5)
+
+  const hasIdeas = savedIdeas.length > 0
+
+  const stats = [
+    {
+      title: "Ideas Analyzed",
+      value: isMounted ? String(totalAnalyzed) : "—",
+      change: totalAnalyzed > 0 ? "Real data" : "Start analyzing",
+      trend: "up" as const,
+      icon: Users,
+      description: "saved in your library",
+      href: "/ideas",
+    },
+    {
+      title: "Avg Viability Score",
+      value: isMounted ? (hasIdeas ? `${avgScore}/10` : "—") : "—",
+      change: hasIdeas ? "across all ideas" : "No data yet",
+      trend: "up" as const,
+      icon: TrendingUp,
+      description: "from Gemini AI",
+      href: "/ideas",
+    },
+    {
+      title: "Top Feature",
+      value: "Analyze",
+      change: "Powered by Gemini",
+      trend: "neutral" as const,
+      icon: Zap,
+      description: "AI-powered idea analysis",
+      href: "/analyze",
+    },
+    {
+      title: "Predictions Made",
+      value: isMounted ? String(totalAnalyzed) : "—",
+      change: totalAnalyzed > 0 ? `+${Math.min(totalAnalyzed, 47)} this session` : "Run your first",
+      trend: totalAnalyzed > 0 ? ("up" as const) : ("neutral" as const),
+      icon: Clock,
+      description: "ideas analyzed total",
+      href: "/analyze",
+    },
+  ]
+
   return (
     <DashboardLayout>
       <div className="space-y-8">
         {/* Page Header */}
         <div className="mb-10">
           <h1 className="text-4xl font-bold text-white mb-2">Dashboard</h1>
-          <p className="text-white/70">Real-time insights into startup predictions and trends</p>
+          <p className="text-white/70">
+            {hasIdeas && isMounted
+              ? `Showing live data for ${totalAnalyzed} analyzed ${totalAnalyzed === 1 ? "idea" : "ideas"}`
+              : "Real-time insights into startup predictions and trends"}
+          </p>
         </div>
+
+        {/* CTA Banner if no ideas yet */}
+        {isMounted && !hasIdeas && (
+          <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 via-indigo-500/5 to-transparent p-6 flex flex-col sm:flex-row items-start sm:items-center gap-5">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-purple-500/30">
+              <Sparkles className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-white font-semibold text-lg mb-1">
+                No analyses saved yet
+              </p>
+              <p className="text-white/60 text-sm">
+                Use Gemini AI to analyze your startup idea. Results will appear here in real-time.
+              </p>
+            </div>
+            <Link
+              href="/analyze"
+              className="flex-shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl
+                bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500
+                text-white font-semibold text-sm shadow-lg shadow-purple-500/25 border border-purple-500/30 transition-all"
+            >
+              <Sparkles className="w-4 h-4" />
+              Analyze Your First Idea
+            </Link>
+          </div>
+        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {stats.map((stat) => (
-            <div
+            <Link
               key={stat.title}
-              className="group rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-6 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl"
+              href={stat.href}
+              className="group rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-6 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl block"
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/30 to-blue-500/30 flex items-center justify-center">
                   <stat.icon className="w-5 h-5 text-cyan-400" />
                 </div>
-                <span className={`text-sm font-medium flex items-center gap-1 ${
-                  stat.trend === "up" ? "text-green-400" : 
-                  stat.trend === "down" ? "text-red-400" : "text-white/60"
-                }`}>
+                <span
+                  className={`text-xs font-medium flex items-center gap-1 ${
+                    stat.trend === "up"
+                      ? "text-green-400"
+                      : stat.trend === "down"
+                      ? "text-red-400"
+                      : "text-white/60"
+                  }`}
+                >
                   {stat.trend === "up" && <ArrowUpRight className="w-4 h-4" />}
                   {stat.trend === "down" && <ArrowDownRight className="w-4 h-4" />}
                   {stat.change}
@@ -97,20 +194,39 @@ export default function DashboardPage() {
               </div>
               <h3 className="text-2xl font-bold text-white mb-1">{stat.value}</h3>
               <p className="text-sm text-white/70">{stat.title}</p>
-            </div>
+            </Link>
           ))}
         </div>
 
         {/* Charts Row */}
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Success Distribution */}
-          <div className="rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-6 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl">
-            <h3 className="text-lg font-semibold text-white mb-6">Success Distribution</h3>
+          {/* Industry Distribution (real data) / Fallback pie */}
+          <div className="rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-white">
+                {hasIdeas && isMounted ? "Ideas by Industry" : "Success Distribution"}
+              </h3>
+              {hasIdeas && isMounted && (
+                <span className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-full">
+                  Live Data
+                </span>
+              )}
+            </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={successDistributionData}
+                    data={
+                      hasIdeas && isMounted
+                        ? pieData
+                        : [
+                            { name: "0-20%", value: 15 },
+                            { name: "20-40%", value: 25 },
+                            { name: "40-60%", value: 30 },
+                            { name: "60-80%", value: 20 },
+                            { name: "80-100%", value: 10 },
+                          ]
+                    }
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
@@ -118,66 +234,76 @@ export default function DashboardPage() {
                     paddingAngle={2}
                     dataKey="value"
                   >
-                    {successDistributionData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
+                    {(hasIdeas && isMounted ? pieData : [1, 2, 3, 4, 5]).map(
+                      (_entry, index) => (
+                        <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                      )
+                    )}
                   </Pie>
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "rgba(22, 22, 30, 0.9)",
                       border: "1px solid rgba(255,255,255,0.1)",
                       borderRadius: "12px",
-                      color: "#fff"
+                      color: "#fff",
                     }}
                   />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex flex-wrap justify-center gap-4 mt-4">
-              {successDistributionData.map((item) => (
-                <div key={item.name} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.fill }} />
-                  <span className="text-sm text-white/70">{item.name}</span>
-                </div>
-              ))}
-            </div>
+            {hasIdeas && isMounted && pieData.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-3 mt-4">
+                {pieData.map((item, i) => (
+                  <div key={item.name} className="flex items-center gap-1.5">
+                    <div
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                    />
+                    <span className="text-xs text-white/70 truncate max-w-[100px]">{item.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Funding vs Success */}
-          <div className="rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-6 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl">
-            <h3 className="text-lg font-semibold text-white mb-6">Funding vs Success Probability</h3>
+          {/* Funding vs Success (static benchmark data) */}
+          <div className="rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-white">
+                Funding vs Success Probability
+              </h3>
+              <span className="text-xs text-white/40 bg-white/5 border border-white/10 px-2 py-1 rounded-full">
+                Benchmark Data
+              </span>
+            </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={fundingVsSuccessData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis 
-                    dataKey="funding" 
-                    tick={{ fill: '#e5e7eb', fontSize: 12 }}
-                    axisLine={{ stroke: 'rgba(255,255,255,0.2)' }}
+                  <XAxis
+                    dataKey="funding"
+                    tick={{ fill: "#e5e7eb", fontSize: 11 }}
+                    axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
                   />
-                  <YAxis 
-                    tick={{ fill: '#e5e7eb', fontSize: 12 }}
-                    axisLine={{ stroke: 'rgba(255,255,255,0.2)' }}
-                    tickFormatter={(value) => `${value}%`}
+                  <YAxis
+                    tick={{ fill: "#e5e7eb", fontSize: 11 }}
+                    axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
+                    tickFormatter={(v) => `${v}%`}
                   />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "rgba(22, 22, 30, 0.9)",
                       border: "1px solid rgba(255,255,255,0.1)",
                       borderRadius: "12px",
-                      color: "#fff"
+                      color: "#fff",
                     }}
                     formatter={(value) => [`${value}%`, "Success Rate"]}
                   />
-                  <Bar 
-                    dataKey="success" 
-                    fill="url(#barGradient)"
-                    radius={[6, 6, 0, 0]}
-                  />
+                  <Bar dataKey="success" fill="url(#barGradient)" radius={[6, 6, 0, 0]} />
                   <defs>
                     <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#06b6d4" />
-                      <stop offset="100%" stopColor="#2563eb" />
+                      <stop offset="0%" stopColor="#a855f7" />
+                      <stop offset="100%" stopColor="#6366f1" />
                     </linearGradient>
                   </defs>
                 </BarChart>
@@ -186,56 +312,123 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Recent Predictions */}
-        <div className="rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-6 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl">
-          <h3 className="text-lg font-semibold text-white mb-6">Recent Predictions</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-white/10">
-                  <th className="text-left text-sm font-medium text-white/60 pb-4">Startup</th>
-                  <th className="text-left text-sm font-medium text-white/60 pb-4">Success Probability</th>
-                  <th className="text-left text-sm font-medium text-white/60 pb-4">Trend</th>
-                  <th className="text-right text-sm font-medium text-white/60 pb-4">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentPredictions.map((prediction, index) => (
-                  <tr key={index} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
-                    <td className="py-4">
-                      <span className="font-medium text-white">{prediction.name}</span>
-                    </td>
-                    <td className="py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-24 h-2 bg-white/10 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500"
-                            style={{ width: `${prediction.probability}%` }}
-                          />
-                        </div>
-                        <span className="text-sm text-white font-medium">{prediction.probability}%</span>
-                      </div>
-                    </td>
-                    <td className="py-4">
-                      <span className={`flex items-center gap-1 text-sm ${
-                        prediction.trend === "up" ? "text-green-400" : "text-red-400"
-                      }`}>
-                        {prediction.trend === "up" ? (
-                          <ArrowUpRight className="w-4 h-4" />
-                        ) : (
-                          <ArrowDownRight className="w-4 h-4" />
-                        )}
-                        {prediction.trend === "up" ? "Improving" : "Declining"}
-                      </span>
-                    </td>
-                    <td className="py-4 text-right text-sm text-white/60">
-                      {prediction.date}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Recent Ideas / Predictions Table */}
+        <div className="rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-6 shadow-2xl">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-white">
+              {hasIdeas && isMounted ? "Recent Analyses" : "Recent Predictions"}
+            </h3>
+            {hasIdeas && isMounted && (
+              <Link
+                href="/ideas"
+                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                View All Ideas
+              </Link>
+            )}
           </div>
+
+          {isMounted && hasIdeas ? (
+            /* Real data table */
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="text-left text-xs font-medium text-white/60 pb-4">Startup</th>
+                    <th className="text-left text-xs font-medium text-white/60 pb-4">Industry</th>
+                    <th className="text-left text-xs font-medium text-white/60 pb-4">Viability Score</th>
+                    <th className="text-right text-xs font-medium text-white/60 pb-4">Analyzed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentIdeas.map((idea) => (
+                    <tr
+                      key={idea.id}
+                      className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors"
+                    >
+                      <td className="py-4">
+                        <span className="font-semibold text-white">{idea.ideaName}</span>
+                      </td>
+                      <td className="py-4">
+                        <span className="text-sm text-white/60">{idea.industry}</span>
+                      </td>
+                      <td className="py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-24 h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-purple-400 to-indigo-500"
+                              style={{ width: `${idea.analysis.viabilityScore * 10}%` }}
+                            />
+                          </div>
+                          <span className={`text-sm font-bold ${getScoreColor(idea.analysis.viabilityScore)}`}>
+                            {idea.analysis.viabilityScore}/10
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-4 text-right text-sm text-white/60">
+                        {formatDate(idea.createdAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            /* Empty / Loading state */
+            <div className="text-center py-12 space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mx-auto">
+                <BarChart3 className="w-7 h-7 text-purple-400" />
+              </div>
+              {isMounted ? (
+                <>
+                  <p className="text-white font-semibold">No analyses yet</p>
+                  <p className="text-white/50 text-sm">
+                    Run a Gemini AI analysis and save it to see live data here.
+                  </p>
+                  <Link
+                    href="/analyze"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl
+                      bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold text-sm
+                      hover:from-purple-500 hover:to-indigo-500 transition-all shadow-lg shadow-purple-500/25"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Analyze an Idea
+                  </Link>
+                </>
+              ) : (
+                /* Skeleton rows */
+                <div className="space-y-3">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="flex gap-4">
+                      <div className="h-4 bg-white/10 rounded flex-1 animate-pulse" />
+                      <div className="h-4 bg-white/10 rounded w-24 animate-pulse" />
+                      <div className="h-4 bg-white/10 rounded w-16 animate-pulse" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Quick Actions Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { icon: Sparkles, label: "Analyze Idea", href: "/analyze", color: "text-purple-400 bg-purple-500/10 border-purple-500/30 hover:bg-purple-500/20" },
+            { icon: Target, label: "Predict Startup", href: "/predict", color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/30 hover:bg-cyan-500/20" },
+            { icon: BookOpen, label: "Ideas Library", href: "/ideas", color: "text-indigo-400 bg-indigo-500/10 border-indigo-500/30 hover:bg-indigo-500/20" },
+            { icon: TrendingUp, label: "Analytics", href: "/analytics", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20" },
+          ].map(({ icon: Icon, label, href, color }) => (
+            <Link
+              key={label}
+              href={href}
+              className={`flex items-center gap-2.5 px-4 py-3 rounded-xl border text-sm font-semibold transition-all ${color}`}
+            >
+              <Icon className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">{label}</span>
+            </Link>
+          ))}
         </div>
       </div>
     </DashboardLayout>

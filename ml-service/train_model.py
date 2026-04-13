@@ -10,9 +10,24 @@ df = pd.read_csv('startup_dataset.csv')
 
 print(f"Dataset shape: {df.shape}")
 print(f"Features: {df.columns.tolist()}")
+print("\nDataset Statistics:")
+print(df[[
+    "funding",
+    "teamSize",
+    "marketSize",
+    "founderExperience"
+]].describe())
+
+print("\nFirst 5 Rows:")
+print(df.head())
 
 # Split data into features and target
-X = df[['funding', 'teamSize', 'marketSize', 'founderExperience']]
+X = df[[
+    "funding",
+    "teamSize",
+    "marketSize",
+    "founderExperience"
+]]
 y = df['success']
 
 print(f"\nFeature shape: {X.shape}")

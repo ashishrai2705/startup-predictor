@@ -2,12 +2,14 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Sparkles, LayoutDashboard, Target, BarChart3, Brain, Info, User, Menu, X, Scale } from "lucide-react"
+import { Sparkles, LayoutDashboard, Target, BarChart3, Brain, Info, User, Menu, X, Scale, Lightbulb, BookOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState } from "react"
 
 const sidebarItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Analyze Idea", href: "/analyze", icon: Lightbulb },
+  { name: "Ideas Library", href: "/ideas", icon: BookOpen },
   { name: "Predict Startup", href: "/predict", icon: Target },
   { name: "Compare Startups", href: "/compare", icon: Scale },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
@@ -118,7 +120,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         <header className="sticky top-0 z-30 h-16 flex items-center justify-between px-6 bg-background/80 backdrop-blur-lg border-b border-border/50">
           <div className="lg:hidden w-10" /> {/* Spacer for mobile menu button */}
           <h1 className="text-lg font-semibold text-foreground lg:ml-0 ml-4">
-            {sidebarItems.find(item => item.href === pathname)?.name || "Dashboard"}
+            {sidebarItems.find(item => item.href === pathname)?.name ||
+              (pathname.startsWith("/analyze/results") ? "Analysis Results" :
+               pathname.startsWith("/analyze") ? "Analyze Idea" : "Dashboard")}
           </h1>
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 flex items-center justify-center border border-border/50 hover:border-purple-500/30 transition-colors cursor-pointer">

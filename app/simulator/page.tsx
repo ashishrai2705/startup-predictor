@@ -63,6 +63,12 @@ export default function SimulatorPage() {
     }
   }, [])
 
+  // Initial fetch on mount
+  useEffect(() => {
+    fetchPrediction(funding, teamSize, marketSize, founderExperience)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Handle slider changes with debounce
   const handleFundingChange = (value: number[]) => {
     setFunding(value[0])
