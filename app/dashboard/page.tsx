@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { motion, AnimatePresence } from "framer-motion"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import {
   TrendingUp, Users, Zap, Clock, ArrowUpRight, ArrowDownRight,
@@ -9,7 +10,7 @@ import {
 } from "lucide-react"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell,
+  PieChart, Pie, Cell, Legend
 } from "recharts"
 import { SavedIdea, LS_SAVED_IDEAS } from "@/types/analysis"
 
@@ -73,10 +74,16 @@ export default function DashboardPage() {
       : "—"
 
   // Compute industry distribution for pie chart
+  const baseCategories = ["AI", "SaaS", "FinTech", "EdTech"]
   const industryCounts: Record<string, number> = {}
+  
+  // Ensure basic expected categories always show up
+  baseCategories.forEach(cat => { industryCounts[cat] = 0 })
+
   savedIdeas.forEach((i) => {
     industryCounts[i.industry] = (industryCounts[i.industry] || 0) + 1
   })
+  
   const pieData = Object.entries(industryCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
@@ -176,16 +183,22 @@ export default function DashboardPage() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {stats.map((stat) => (
-            <Link
-              key={stat.title}
-              href={stat.href}
-              className="group rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-6 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl block"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/30 to-blue-500/30 flex items-center justify-center">
-                  <stat.icon className="w-5 h-5 text-cyan-400" />
-                </div>
+          <AnimatePresence>
+            {stats.map((stat, idx) => (
+              <motion.div
+                key={stat.title}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: idx * 0.1 }}
+              >
+                <Link
+                  href={stat.href}
+                  className="group rounded-2xl border border-cyan-400/30 bg-white/10 backdrop-blur-xl p-6 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all duration-300 shadow-2xl block hover:-translate-y-1"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/30 to-blue-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <stat.icon className="w-5 h-5 text-cyan-400" />
+                    </div>
                 <span
                   className={`text-xs font-medium flex items-center gap-1 ${
                     stat.trend === "up"
@@ -199,11 +212,22 @@ export default function DashboardPage() {
                   {stat.trend === "down" && <ArrowDownRight className="w-4 h-4" />}
                   {stat.change}
                 </span>
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-1">{stat.value}</h3>
-              <p className="text-sm text-white/70">{stat.title}</p>
-            </Link>
-          ))}
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-1">
+                  <motion.span 
+                    key={stat.value} 
+                    initial={{ opacity: 0, filter: "blur(4px)" }} 
+                    animate={{ opacity: 1, filter: "blur(0px)" }}
+                    transition={{ duration: 0.4 }}
+                  >
+                    {stat.value}
+                  </motion.span>
+                </h3>
+                <p className="text-sm text-white/70">{stat.title}</p>
+              </Link>
+             </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
 
         {/* Charts Row */}
@@ -228,11 +252,11 @@ export default function DashboardPage() {
                       hasIdeas && isMounted
                         ? pieData
                         : [
-                            { name: "0-20%", value: 15 },
-                            { name: "20-40%", value: 25 },
-                            { name: "40-60%", value: 30 },
-                            { name: "60-80%", value: 20 },
-                            { name: "80-100%", value: 10 },
+                            { name: "AI", value: 35 },
+                            { name: "SaaS", value: 25 },
+                            { name: "EdTech", value: 20 },
+                            { name: "FinTech", value: 15 },
+                            { name: "Others", value: 5 },
                           ]
                     }
                     cx="50%"
@@ -241,6 +265,8 @@ export default function DashboardPage() {
                     outerRadius={100}
                     paddingAngle={2}
                     dataKey="value"
+                    animationDuration={1500}
+                    animationEasing="ease-out"
                   >
                     {(hasIdeas && isMounted ? pieData : [1, 2, 3, 4, 5]).map(
                       (_entry, index) => (
@@ -255,23 +281,17 @@ export default function DashboardPage() {
                       borderRadius: "12px",
                       color: "#fff",
                     }}
+                    itemStyle={{ color: "#fff" }}
+                  />
+                  <Legend 
+                    verticalAlign="bottom" 
+                    height={36} 
+                    iconType="circle"
+                    wrapperStyle={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)' }} 
                   />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            {hasIdeas && isMounted && pieData.length > 0 && (
-              <div className="flex flex-wrap justify-center gap-3 mt-4">
-                {pieData.map((item, i) => (
-                  <div key={item.name} className="flex items-center gap-1.5">
-                    <div
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
-                    />
-                    <span className="text-xs text-white/70 truncate max-w-[100px]">{item.name}</span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Funding vs Success (static benchmark data) */}
@@ -307,7 +327,13 @@ export default function DashboardPage() {
                     }}
                     formatter={(value) => [`${value}%`, "Success Rate"]}
                   />
-                  <Bar dataKey="success" fill="url(#barGradient)" radius={[6, 6, 0, 0]} />
+                  <Bar 
+                    dataKey="success" 
+                    fill="url(#barGradient)" 
+                    radius={[6, 6, 0, 0]} 
+                    animationDuration={1500}
+                    animationEasing="ease-out"
+                  />
                   <defs>
                     <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#a855f7" />

@@ -414,58 +414,63 @@ export default function LandingPage() {
 
       {/* DASHBOARD PREVIEW */}
       <motion.section
-        initial={{ opacity: 0, y: 40 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        transition={{ duration: 0.8 }}
         viewport={{ once: true, margin: "-100px" }}
-        className="py-24 px-6 relative"
+        className="py-32 px-6 relative overflow-hidden"
       >
-        <div className="absolute inset-0 -z-10">
+        <div className="absolute inset-0 -z-20">
           <Image
             src="https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=1600&h=900&fit=crop"
             alt="Dashboard Background"
             fill
-            className="object-cover opacity-40"
+            className="object-cover opacity-20"
           />
         </div>
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/50 to-slate-950/80 -z-10" />
+        
+        {/* Animated Glows & Particles */}
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/60 to-slate-950/90 -z-10" />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-[100px] -z-10 animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-600/20 rounded-full blur-[100px] -z-10 animate-pulse" style={{ animationDelay: '1000ms' }} />
 
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-6xl mx-auto relative z-10">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
             viewport={{ once: true }}
-            className="text-center mb-16"
+            className="text-center mb-20"
           >
-            <h2 className="text-5xl font-bold mb-4 text-white">
-              Powerful Dashboard
+            <h2 className="text-5xl md:text-6xl font-black mb-6 text-white tracking-tight drop-shadow-2xl">
+              A <span className="bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">Powerful Dashboard</span>
             </h2>
-            <p className="text-white/70 text-lg max-w-2xl mx-auto">
+            <p className="text-white/70 text-xl max-w-3xl mx-auto font-light">
               All the tools you need to evaluate startup potential in one
-              intuitive interface.
+              intuitive, real-time interface.
             </p>
           </motion.div>
 
-          <div className="relative flex justify-center">
+          <div className="relative flex justify-center perspective-1000">
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5 }}
+              initial={{ opacity: 0, y: 80, rotateX: 10 }}
+              whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
               viewport={{ once: true }}
               whileHover={{ scale: 1.02, y: -10 }}
               className="w-full max-w-5xl"
             >
-              <div className="relative rounded-2xl overflow-hidden shadow-2xl hover:shadow-purple-500/20 transition-shadow">
+              <div className="relative rounded-2xl overflow-hidden shadow-[0_0_50px_-12px_rgba(168,85,247,0.4)] hover:shadow-[0_0_80px_-12px_rgba(168,85,247,0.6)] transition-all duration-500 border border-purple-500/30">
                 <Image
                   src="/dashboard.png"
-                  width={1200}
-                  height={700}
+                  width={1400}
+                  height={800}
                   alt="Startup Predictor Dashboard"
-                  className="w-full h-auto border border-white/20 rounded-2xl backdrop-blur"
+                  className="w-full h-auto rounded-2xl backdrop-blur-xl"
                   priority
                 />
-                <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/10 via-transparent to-transparent rounded-2xl pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/10 via-transparent to-cyan-500/10 rounded-2xl pointer-events-none" />
+                <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl pointer-events-none" />
               </div>
             </motion.div>
           </div>

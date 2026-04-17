@@ -130,6 +130,7 @@ export default function AnalyticsPage() {
                       borderRadius: "12px",
                       color: "#fff"
                     }}
+                    itemStyle={{ color: "#fff" }}
                     formatter={(value, name) => [
                       name === "rate" ? `${value}%` : value,
                       name === "rate" ? "Success Rate" : "Startups"
@@ -176,6 +177,7 @@ export default function AnalyticsPage() {
                       borderRadius: "12px",
                       color: "#fff"
                     }}
+                    itemStyle={{ color: "#fff" }}
                     formatter={(value) => [`${value}%`, "Success Rate"]}
                   />
                   <Area 
@@ -216,6 +218,7 @@ export default function AnalyticsPage() {
                       borderRadius: "12px",
                       color: "#fff"
                     }}
+                    itemStyle={{ color: "#fff" }}
                     formatter={(value) => [`${value}%`, "Survival Rate"]}
                   />
                   <Line 
@@ -257,6 +260,7 @@ export default function AnalyticsPage() {
                       borderRadius: "12px",
                       color: "#fff"
                     }}
+                    itemStyle={{ color: "#fff" }}
                     formatter={(value) => [`${value}%`, "Success Rate"]}
                   />
                   <Bar 
@@ -306,6 +310,7 @@ export default function AnalyticsPage() {
                     borderRadius: "12px",
                     color: "#fff"
                   }}
+                  itemStyle={{ color: "#fff" }}
                   formatter={(value) => [value, "Predictions"]}
                 />
                 <Area 
