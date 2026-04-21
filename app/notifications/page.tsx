@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Bell, Heart, MessageSquare, Handshake, Calendar, Check, X, Sparkles } from "lucide-react";
+import { Bell, Heart, Check, X, Eye, Handshake, Video, TrendingUp, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { useUserMode } from "@/context/UserModeContext";
 
-type NotificationType = "like" | "pitch" | "comment" | "meeting" | "system";
+type NotificationType = "like" | "view" | "accept" | "pitch" | "fund";
 
 interface Notification {
   id: number;
@@ -21,26 +22,38 @@ interface Notification {
   read: boolean;
 }
 
-const initialNotifications: Notification[] = [
-  { id: 1, type: "meeting", user: "Alex Horowitz", avatar: "https://i.pravatar.cc/150?u=alex", action: "requested a 15-min intro call regarding your HealthTech idea.", time: "10m ago", read: false },
-  { id: 2, type: "pitch", user: "Sequoia Cap", avatar: "https://i.pravatar.cc/150?u=sequoia", action: "requested to view your full pitch report for 'AI CRM'.", time: "2h ago", read: false },
-  { id: 3, type: "like", user: "Eleanor Pena", avatar: "https://i.pravatar.cc/150?u=eleanor", action: "liked your post in the community feed.", time: "4h ago", read: false },
-  { id: 4, type: "comment", user: "Jin Doe", avatar: "https://i.pravatar.cc/150?u=jin", action: "commented: 'Great insights on the TAM!'", time: "5h ago", read: true },
-  { id: 5, type: "system", user: "System", action: "Your AI Viability Score improved to 8.5/10! Check your updated analysis.", time: "1d ago", read: true },
-];
-
 const getIcon = (type: NotificationType) => {
   switch (type) {
-    case "like": return <Heart className="w-4 h-4 fill-emerald-500 text-emerald-500" />;
-    case "comment": return <MessageSquare className="w-4 h-4 text-blue-400" />;
-    case "pitch": return <Handshake className="w-4 h-4 text-purple-500" />;
-    case "meeting": return <Calendar className="w-4 h-4 text-amber-500" />;
-    case "system": return <Sparkles className="w-4 h-4 text-cyan-400" />;
+    case "like": return <Heart className="w-4 h-4 fill-pink-500 text-pink-500" />;
+    case "view": return <Eye className="w-4 h-4 text-purple-400" />;
+    case "accept": return <Handshake className="w-4 h-4 text-emerald-500" />;
+    case "pitch": return <Video className="w-4 h-4 text-cyan-400" />;
+    case "fund": return <TrendingUp className="w-4 h-4 text-amber-500" />;
+    default: return <Bell className="w-4 h-4 text-white/50" />;
   }
 };
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState(initialNotifications);
+  const { investorId } = useUserMode();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchNotifs = async () => {
+      try {
+        const res = await fetch(`/api/notifications?investor_id=${investorId || ""}`);
+        if (!res.ok) throw new Error("Failed to load");
+        const data = await res.json();
+        setNotifications(data);
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to load notifications");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchNotifs();
+  }, [investorId]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -56,87 +69,86 @@ export default function NotificationsPage() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto py-8 px-4">
+      <div className="max-w-2xl mx-auto py-8 px-4">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 flex items-center justify-center border border-purple-500/30">
-              <Bell className="w-6 h-6 text-purple-400" />
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center border border-cyan-500/20">
+              <Bell className="w-5 h-5 text-cyan-400" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-                Notifications
+              <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                Activity
                 {unreadCount > 0 && (
-                  <span className="bg-purple-600 text-white text-xs px-2.5 py-1 rounded-full font-extrabold animate-[pulse_2s_ease-in-out_infinite] shadow-[0_0_15px_rgba(168,85,247,0.5)]">
+                  <span className="bg-pink-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
                     {unreadCount} New
                   </span>
                 )}
               </h1>
-              <p className="text-muted-foreground text-sm">Stay updated with your startup network</p>
             </div>
           </div>
           {unreadCount > 0 && (
-            <Button variant="outline" size="sm" onClick={markAllRead} className="border-purple-500/30 hover:bg-purple-500/10 transition-colors">
-              <Check className="w-4 h-4 mr-2" /> Mark all as read
+            <Button variant="ghost" size="sm" onClick={markAllRead} className="text-white/50 hover:text-white">
+              Mark all read
             </Button>
           )}
         </div>
 
-        <div className="space-y-4">
-          <AnimatePresence>
-            {notifications.length === 0 ? (
-              <motion.div 
-                initial={{ opacity: 0 }} 
-                animate={{ opacity: 1 }} 
-                className="text-center py-20 text-muted-foreground"
-              >
-                <Bell className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                <p>You're all caught up!</p>
-              </motion.div>
-            ) : (
-              notifications.map((notif, idx) => (
-                <motion.div
-                  key={notif.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.3, delay: idx * 0.05 }}
-                  layout
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <AnimatePresence>
+              {notifications.length === 0 ? (
+                <motion.div 
+                  initial={{ opacity: 0 }} 
+                  animate={{ opacity: 1 }} 
+                  className="text-center py-20 text-white/30"
                 >
-                  <Card className={`glass-card overflow-hidden transition-all duration-300 border-border/40 ${!notif.read ? 'bg-purple-500/5 hover:bg-purple-500/10 border-purple-500/30' : 'hover:bg-white/5'}`}>
-                    <CardContent className="p-4 sm:p-6 flex items-start gap-4">
-                      <div className="relative shrink-0 mt-1">
-                        {notif.avatar ? (
-                          <Avatar className="w-12 h-12 border-2 border-background">
-                            <AvatarImage src={notif.avatar} />
-                            <AvatarFallback>{notif.user[0]}</AvatarFallback>
-                          </Avatar>
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center border-2 border-background">
-                            <Sparkles className="w-6 h-6 text-cyan-400" />
-                          </div>
-                        )}
-                        <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-background flex items-center justify-center shadow-lg">
+                  <Bell className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                  <p>No new activity</p>
+                </motion.div>
+              ) : (
+                notifications.map((notif, idx) => (
+                  <motion.div
+                    key={notif.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.2, delay: idx * 0.05 }}
+                    layout
+                  >
+                    <div className={`p-4 rounded-2xl flex items-start gap-4 transition-all duration-300 ${
+                      !notif.read ? 'bg-white/[0.04] border border-white/10 hover:bg-white/[0.06]' : 'hover:bg-white/[0.02]'
+                    }`}>
+                      <div className="relative shrink-0">
+                        <Avatar className="w-12 h-12 border border-white/10">
+                          <AvatarImage src={notif.avatar} />
+                          <AvatarFallback className="bg-purple-500/20 text-purple-300 font-bold">
+                            {notif.user[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-slate-900 border border-white/10 flex items-center justify-center shadow-lg">
                           {getIcon(notif.type)}
                         </div>
                       </div>
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
-                          <p className="text-sm">
-                            <span className="font-semibold text-foreground">{notif.user}</span>{" "}
-                            <span className="text-muted-foreground">{notif.action}</span>
-                          </p>
-                          <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 font-medium">
-                            {notif.time}
-                          </span>
-                        </div>
+                      <div className="flex-1 min-w-0 pt-1">
+                        <p className="text-sm text-white/80 leading-snug">
+                          <span className="font-bold text-white mr-1.5">{notif.user}</span>
+                          {notif.action}
+                        </p>
+                        <span className="text-xs text-white/40 mt-1 block">
+                          {notif.time}
+                        </span>
                         
-                        {!notif.read && (notif.type === "meeting" || notif.type === "pitch") && (
+                        {!notif.read && (notif.action.includes("connection request") || notif.type === "accept" && notif.action.includes("request")) && (
                           <div className="mt-3 flex gap-2">
                             <Button 
                               size="sm" 
                               onClick={() => handleAction(notif.id, "accept")}
-                              className="bg-purple-600 hover:bg-purple-700 h-8 text-xs px-4"
+                              className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 h-8 text-xs border border-cyan-500/30"
                             >
                               <Check className="w-3.5 h-3.5 mr-1" /> Accept
                             </Button>
@@ -144,7 +156,7 @@ export default function NotificationsPage() {
                               variant="outline" 
                               size="sm" 
                               onClick={() => handleAction(notif.id, "decline")}
-                              className="h-8 text-xs border-border/50 hover:bg-red-500/10 hover:text-red-400"
+                              className="h-8 text-xs border-white/10 hover:bg-red-500/10 hover:text-red-400 text-white/60"
                             >
                               <X className="w-3.5 h-3.5 mr-1" /> Decline
                             </Button>
@@ -153,15 +165,15 @@ export default function NotificationsPage() {
                       </div>
                       
                       {!notif.read && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0 mt-3 shadow-[0_0_8px_rgba(168,85,247,0.8)] animate-pulse" />
+                        <div className="w-2 h-2 rounded-full bg-cyan-400 shrink-0 mt-3 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
                       )}
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))
-            )}
-          </AnimatePresence>
-        </div>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

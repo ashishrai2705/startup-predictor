@@ -1,5 +1,5 @@
-import LandingPage from "@/components/landing-page";
+import ModeGate from "@/components/mode-gate"
 
 export default function Page() {
-  return <LandingPage />;
+  return <ModeGate />
 }

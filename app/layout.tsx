@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from "@/components/ui/sonner"
+import { UserModeProvider } from "@/context/UserModeContext"
 import './globals.css'
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" })
@@ -38,7 +39,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased`}>
-        {children}
+        <UserModeProvider>
+          {children}
+        </UserModeProvider>
         <Analytics />
         <Toaster />
       </body>
