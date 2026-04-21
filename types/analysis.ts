@@ -54,3 +54,9 @@ export interface SavedIdea {
 export const LS_SAVED_IDEAS = "savedStartupIdeas"
 export const LS_LAST_ANALYSIS = "lastStartupAnalysis"
 export const LS_LAST_INPUT = "lastAnalysisInput"
+export const LS_USER_MODE = "userMode"
+export const LS_INVESTOR_ID = "investorId"
+
+// ─── User Mode ───────────────────────────────────────────────────────────────
+
+export type UserMode = "founder" | "investor"
