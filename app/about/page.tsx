@@ -29,9 +29,9 @@ const features = [
 ]
 
 const team = [
-  { name: "Alex Chen", role: "Founder & CEO", avatar: "AC" },
-  { name: "Sarah Kim", role: "Head of AI", avatar: "SK" },
-  { name: "Mike Johnson", role: "Lead Engineer", avatar: "MJ" },
+  { name: "Ashish Rai", role: "Founder & CEO", avatar: "AR" },
+  { name: "Rishabh Dobriyal", role: "Head of AI & Database", avatar: "RD" },
+
 ]
 
 export default function AboutPage() {

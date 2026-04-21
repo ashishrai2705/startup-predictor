@@ -55,6 +55,24 @@ try:
 except Exception as e:
     raise RuntimeError(f"Model failed to load: {e}")
 
+# Pre-compute feature importances from the model (works for tree-based & linear models)
+try:
+    if hasattr(model, "feature_importances_"):
+        _raw_importance = model.feature_importances_
+    elif hasattr(model, "coef_"):
+        _raw_importance = np.abs(model.coef_[0])
+    else:
+        _raw_importance = np.array([0.25, 0.25, 0.25, 0.25])
+    _importance_sum = _raw_importance.sum() or 1.0
+    FEATURE_NAMES = ["funding", "teamSize", "marketSize", "founderExperience"]
+    FEATURE_IMPORTANCE: Dict[str, float] = {
+        name: round(float(val / _importance_sum), 4)
+        for name, val in zip(FEATURE_NAMES, _raw_importance)
+    }
+except Exception as fi_err:
+    logging.warning("Could not compute feature importances: %s", fi_err)
+    FEATURE_IMPORTANCE = {"funding": 0.40, "teamSize": 0.20, "marketSize": 0.25, "founderExperience": 0.15}
+
 # ─── App Setup ────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Startup Predictor + AI Analyzer API")
@@ -205,10 +223,10 @@ def predict(req: PredictionRequest):
     risk = "low" if score > 70 else "medium" if score > 40 else "high"
 
     breakdown = {
-        "fundingScore": int(req.funding / 5_000_000 * 100),
-        "teamScore": int(req.teamSize / 15 * 100),
-        "marketScore": int(req.marketSize / 500_000_000 * 100),
-        "experienceScore": int(req.founderExperience / 10 * 100),
+        "fundingScore": min(int(req.funding / 5_000_000 * 100), 100),
+        "teamScore": min(int(req.teamSize / 15 * 100), 100),
+        "marketScore": min(int(req.marketSize / 500_000_000 * 100), 100),
+        "experienceScore": min(int(req.founderExperience / 10 * 100), 100),
     }
 
     report = generate_investor_report(score, risk, *breakdown.values())
@@ -239,14 +257,43 @@ def predict(req: PredictionRequest):
     return {
         "successProbability": score,
         "riskLevel": risk,
-        "featureImportance": {},
+        "featureImportance": FEATURE_IMPORTANCE,
         "breakdown": breakdown,
         "report": report,
     }
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(req: AnalyzeRequest):
-    prompt = f"Analyze startup: {req.idea}"
+    prompt = f"""You are a startup business analyst. Analyze the startup idea below and return ONLY a valid JSON object with no markdown, no code fences, no explanation — just raw JSON.
+
+Startup Name: {req.ideaName}
+Industry: {req.industry}
+Target Market: {req.targetMarket}
+Idea Description: {req.idea}
+
+Return this exact JSON schema:
+{{
+  "swot": {{
+    "strengths": ["string", ...],
+    "weaknesses": ["string", ...],
+    "opportunities": ["string", ...],
+    "threats": ["string", ...]
+  }},
+  "marketSize": {{
+    "tam": "e.g. $50B",
+    "sam": "e.g. $5B",
+    "som": "e.g. $500M"
+  }},
+  "competitors": [
+    {{"name": "string", "description": "string", "differentiator": "string"}},
+    {{"name": "string", "description": "string", "differentiator": "string"}},
+    {{"name": "string", "description": "string", "differentiator": "string"}}
+  ],
+  "viabilityScore": 7,
+  "businessBrief": "2-3 sentence executive summary",
+  "recommendation": "1-2 sentence investor recommendation"
+}}
+"""
 
     try:
         raw = await call_gemini(prompt)

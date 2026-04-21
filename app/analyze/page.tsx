@@ -92,11 +92,18 @@ export default function AnalyzePage() {
         body: JSON.stringify(form),
       })
 
-      const data = await res.json()
-
       if (!res.ok) {
-        throw new Error(data.error || "Analysis failed. Please try again.")
+        let errorMsg = `Analysis failed (${res.status})`
+        try {
+          const errData = await res.json()
+          errorMsg = errData.error || errorMsg
+        } catch {
+          // response was not JSON (e.g. HTML error from gateway)
+        }
+        throw new Error(errorMsg)
       }
+
+      const data = await res.json()
 
       // Store for results page
       if (typeof window !== "undefined") {
