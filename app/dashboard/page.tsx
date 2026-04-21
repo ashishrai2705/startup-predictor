@@ -58,12 +58,19 @@ function getScoreColor(score: number) {
 
 export default function DashboardPage() {
   const [savedIdeas, setSavedIdeas] = useState<SavedIdea[]>([])
+  const [predictionCount, setPredictionCount] = useState<number | null>(null)
   const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
     setIsMounted(true)
     const raw = localStorage.getItem(LS_SAVED_IDEAS)
     if (raw) setSavedIdeas(JSON.parse(raw))
+
+    // Fetch real prediction count from the ML service via the Next.js proxy
+    fetch("/api/predict?limit=100")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: unknown[]) => setPredictionCount(data.length))
+      .catch(() => setPredictionCount(0))
   }, [])
 
   // Derived stats from real data
@@ -133,12 +140,12 @@ export default function DashboardPage() {
     },
     {
       title: "Predictions Made",
-      value: isMounted ? String(totalAnalyzed) : "—",
-      change: totalAnalyzed > 0 ? `+${Math.min(totalAnalyzed, 47)} this session` : "Run your first",
-      trend: totalAnalyzed > 0 ? ("up" as const) : ("neutral" as const),
+      value: isMounted ? (predictionCount !== null ? String(predictionCount) : "—") : "—",
+      change: predictionCount !== null && predictionCount > 0 ? `${predictionCount} total` : "Run your first",
+      trend: predictionCount !== null && predictionCount > 0 ? ("up" as const) : ("neutral" as const),
       icon: Clock,
-      description: "ideas analyzed total",
-      href: "/analyze",
+      description: "via ML model",
+      href: "/predict",
     },
   ]
 

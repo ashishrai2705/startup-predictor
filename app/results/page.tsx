@@ -1,58 +1,98 @@
 "use client"
 
-import { useSearchParams } from "next/navigation"
+import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, AlertTriangle, XCircle, TrendingUp, Shield, Zap, ArrowRight, RotateCcw, DollarSign, Users, Building2, Calendar } from "lucide-react"
+import { CheckCircle2, AlertTriangle, XCircle, TrendingUp, Shield, ArrowRight, RotateCcw, DollarSign, Users, TrendingDown, Award } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar } from "recharts"
 import { Suspense } from "react"
 
-function ResultsContent() {
-  const searchParams = useSearchParams()
-  
-  // Get form data from URL params
-  const funding = Number(searchParams.get("funding")) || 5000000
-  const team = Number(searchParams.get("team")) || 25
-  const industry = searchParams.get("industry") || "technology"
-  const years = Number(searchParams.get("years")) || 3
-  const rounds = Number(searchParams.get("rounds")) || 2
-  const milestones = Number(searchParams.get("milestones")) || 5
+interface PredictionResult {
+  successProbability: number
+  riskLevel: "low" | "medium" | "high"
+  breakdown: {
+    fundingScore: number
+    teamScore: number
+    marketScore: number
+    experienceScore: number
+  }
+  featureImportance: {
+    funding?: number
+    teamSize?: number
+    marketSize?: number
+    founderExperience?: number
+  }
+  report: {
+    strengths: string[]
+    risks: string[]
+    recommendation: string
+  }
+}
 
-  // Calculate success probability based on inputs (simulated AI model)
-  const calculateProbability = () => {
-    let score = 50
-    
-    // Funding impact (up to +20)
-    if (funding > 10000000) score += 20
-    else if (funding > 5000000) score += 15
-    else if (funding > 1000000) score += 10
-    else score += 5
-    
-    // Team size impact (up to +15)
-    if (team >= 20 && team <= 100) score += 15
-    else if (team >= 10) score += 10
-    else score += 5
-    
-    // Years active impact (up to +10)
-    if (years >= 3 && years <= 7) score += 10
-    else if (years >= 2) score += 5
-    
-    // Funding rounds impact (up to +10)
-    score += Math.min(rounds * 3, 10)
-    
-    // Milestones impact (up to +15)
-    score += Math.min(milestones * 2, 15)
-    
-    return Math.min(score, 95)
+interface PredictionInput {
+  funding: number
+  teamSize: number
+  marketSize: number
+  founderExperience: number
+}
+
+function ResultsContent() {
+  const router = useRouter()
+  const [result, setResult] = useState<PredictionResult | null>(null)
+  const [input, setInput] = useState<PredictionInput | null>(null)
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+    // Read the real ML result saved by /predict page
+    const raw = localStorage.getItem("predictionHistory")
+    if (raw) {
+      try {
+        const history = JSON.parse(raw)
+        if (Array.isArray(history) && history.length > 0) {
+          const last = history[history.length - 1]
+          setResult(last)
+          // Try to recover inputs from sessionStorage if available
+          const inputRaw = sessionStorage.getItem("lastPredictionInput")
+          if (inputRaw) setInput(JSON.parse(inputRaw))
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+  }, [])
+
+  if (!isMounted) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+      </div>
+    )
   }
 
-  const successProbability = calculateProbability()
-  
-  const getRiskLevel = (prob: number) => {
-    if (prob >= 70) return { level: "Low", color: "text-green-400", bg: "bg-green-400/10", icon: CheckCircle2 }
-    if (prob >= 50) return { level: "Medium", color: "text-yellow-400", bg: "bg-yellow-400/10", icon: AlertTriangle }
-    return { level: "High", color: "text-red-400", bg: "bg-red-400/10", icon: XCircle }
+  if (!result) {
+    return (
+      <div className="max-w-xl mx-auto text-center py-20 space-y-6">
+        <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mx-auto">
+          <TrendingUp className="w-8 h-8 text-purple-400" />
+        </div>
+        <h1 className="text-2xl font-bold text-foreground">No Prediction Found</h1>
+        <p className="text-muted-foreground">
+          Run a prediction first and your results will appear here.
+        </p>
+        <Button asChild className="bg-gradient-to-r from-purple-500 to-blue-500 text-white px-8 py-3 rounded-xl">
+          <Link href="/predict">Go to Predictor</Link>
+        </Button>
+      </div>
+    )
+  }
+
+  const getRiskInfo = (level: string) => {
+    if (level === "low") return { label: "Low Risk", color: "text-green-400", bg: "bg-green-400/10", icon: CheckCircle2 }
+    if (level === "medium") return { label: "Medium Risk", color: "text-yellow-400", bg: "bg-yellow-400/10", icon: AlertTriangle }
+    return { label: "High Risk", color: "text-red-400", bg: "bg-red-400/10", icon: XCircle }
   }
 
   const getGrowthPotential = (prob: number) => {
@@ -61,19 +101,19 @@ function ResultsContent() {
     return { level: "Low", color: "text-red-400" }
   }
 
-  const risk = getRiskLevel(successProbability)
-  const growth = getGrowthPotential(successProbability)
+  const riskInfo = getRiskInfo(result.riskLevel)
+  const growth = getGrowthPotential(result.successProbability)
 
-  const featureImportance = [
-    { name: "Funding", value: 32, fill: "var(--chart-1)" },
-    { name: "Team Size", value: 24, fill: "var(--chart-2)" },
-    { name: "Milestones", value: 18, fill: "var(--chart-3)" },
-    { name: "Industry", value: 14, fill: "var(--chart-4)" },
-    { name: "Years Active", value: 12, fill: "var(--chart-5)" },
+  // Build chart data from real model feature importances
+  const featureChartData = [
+    { name: "Funding", value: Math.round((result.featureImportance?.funding ?? 0.35) * 100) },
+    { name: "Team Size", value: Math.round((result.featureImportance?.teamSize ?? 0.20) * 100) },
+    { name: "Market Size", value: Math.round((result.featureImportance?.marketSize ?? 0.25) * 100) },
+    { name: "Experience", value: Math.round((result.featureImportance?.founderExperience ?? 0.20) * 100) },
   ]
 
   const gaugeData = [
-    { name: "Probability", value: successProbability, fill: "url(#gaugeGradient)" }
+    { name: "Probability", value: result.successProbability, fill: "url(#gaugeGradient)" }
   ]
 
   return (
@@ -81,9 +121,7 @@ function ResultsContent() {
       {/* Header */}
       <div className="text-center">
         <h1 className="text-3xl font-bold text-foreground mb-3">Prediction Results</h1>
-        <p className="text-muted-foreground">
-          AI analysis complete for your {industry.charAt(0).toUpperCase() + industry.slice(1)} startup
-        </p>
+        <p className="text-muted-foreground">AI-powered analysis from your ML model</p>
       </div>
 
       {/* Main Results Grid */}
@@ -118,18 +156,18 @@ function ResultsContent() {
                 </RadialBarChart>
               </ResponsiveContainer>
               <div className="text-center -mt-20">
-                <span className="text-5xl font-bold gradient-text">{successProbability}%</span>
+                <span className="text-5xl font-bold gradient-text">{result.successProbability}%</span>
               </div>
             </div>
             
             <div className="flex-1 space-y-4">
               <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-xl ${risk.bg} flex items-center justify-center`}>
-                  <risk.icon className={`w-6 h-6 ${risk.color}`} />
+                <div className={`w-12 h-12 rounded-xl ${riskInfo.bg} flex items-center justify-center`}>
+                  <riskInfo.icon className={`w-6 h-6 ${riskInfo.color}`} />
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Risk Level</p>
-                  <p className={`text-xl font-semibold ${risk.color}`}>{risk.level}</p>
+                  <p className={`text-xl font-semibold ${riskInfo.color}`}>{riskInfo.label}</p>
                 </div>
               </div>
               
@@ -148,102 +186,94 @@ function ResultsContent() {
                   <Shield className="w-6 h-6 text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Model Confidence</p>
-                  <p className="text-xl font-semibold text-foreground">92%</p>
+                  <p className="text-sm text-muted-foreground">Recommendation</p>
+                  <p className="text-sm font-medium text-foreground leading-snug">{result.report.recommendation}</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Input Summary */}
+        {/* Breakdown Scores */}
         <div className="glass-card rounded-3xl p-6 space-y-4">
-          <h3 className="text-lg font-semibold text-foreground mb-4">Input Summary</h3>
-          
+          <h3 className="text-lg font-semibold text-foreground mb-4">Score Breakdown</h3>
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <DollarSign className="w-4 h-4" />
-                <span className="text-sm">Funding</span>
+            {[
+              { label: "Funding", value: result.breakdown.fundingScore, icon: DollarSign, color: "from-cyan-500 to-blue-500" },
+              { label: "Team", value: result.breakdown.teamScore, icon: Users, color: "from-purple-500 to-pink-500" },
+              { label: "Market", value: result.breakdown.marketScore, icon: TrendingDown, color: "from-teal-500 to-cyan-500" },
+              { label: "Experience", value: result.breakdown.experienceScore, icon: Award, color: "from-orange-500 to-pink-500" },
+            ].map(({ label, value, icon: Icon, color }) => (
+              <div key={label}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Icon className="w-3.5 h-3.5" />
+                    <span className="text-xs">{label}</span>
+                  </div>
+                  <span className="text-sm font-semibold text-foreground">{value}/100</span>
+                </div>
+                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div className={`h-full bg-gradient-to-r ${color} rounded-full`} style={{ width: `${value}%` }} />
+                </div>
               </div>
-              <span className="text-sm font-medium text-foreground">${(funding / 1000000).toFixed(1)}M</span>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Users className="w-4 h-4" />
-                <span className="text-sm">Team Size</span>
-              </div>
-              <span className="text-sm font-medium text-foreground">{team} people</span>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Building2 className="w-4 h-4" />
-                <span className="text-sm">Industry</span>
-              </div>
-              <span className="text-sm font-medium text-foreground capitalize">{industry}</span>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Calendar className="w-4 h-4" />
-                <span className="text-sm">Years Active</span>
-              </div>
-              <span className="text-sm font-medium text-foreground">{years} years</span>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Zap className="w-4 h-4" />
-                <span className="text-sm">Funding Rounds</span>
-              </div>
-              <span className="text-sm font-medium text-foreground">{rounds}</span>
-            </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Feature Importance Chart */}
+      {/* Feature Importance Chart — from real model */}
       <div className="glass-card rounded-3xl p-8">
-        <h2 className="text-lg font-semibold text-foreground mb-6">Feature Importance</h2>
-        <p className="text-sm text-muted-foreground mb-6">
-          How each factor contributed to the prediction
-        </p>
-        <div className="h-64">
+        <h2 className="text-lg font-semibold text-foreground mb-2">Feature Importance</h2>
+        <p className="text-sm text-muted-foreground mb-6">How each factor contributed to this prediction</p>
+        <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={featureImportance} layout="vertical">
+            <BarChart data={featureChartData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" horizontal={false} />
-              <XAxis 
-                type="number" 
-                tick={{ fill: '#888', fontSize: 12 }}
-                axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                tickFormatter={(value) => `${value}%`}
-              />
-              <YAxis 
-                type="category" 
-                dataKey="name" 
-                tick={{ fill: '#888', fontSize: 12 }}
-                axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                width={100}
-              />
+              <XAxis type="number" tick={{ fill: '#888', fontSize: 12 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} tickFormatter={(v) => `${v}%`} />
+              <YAxis type="category" dataKey="name" tick={{ fill: '#888', fontSize: 12 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} width={90} />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: "rgba(22, 22, 30, 0.9)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "12px",
-                  color: "#fff"
-                }}
+                contentStyle={{ backgroundColor: "rgba(22,22,30,0.9)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", color: "#fff" }}
                 formatter={(value) => [`${value}%`, "Importance"]}
               />
-              <Bar 
-                dataKey="value" 
-                radius={[0, 6, 6, 0]}
-              />
+              <Bar dataKey="value" fill="#a855f7" radius={[0, 6, 6, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Strengths & Risks */}
+      {(result.report.strengths.length > 0 || result.report.risks.length > 0) && (
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="glass-card rounded-3xl p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <CheckCircle2 className="w-5 h-5 text-green-400" />
+              <h3 className="font-semibold text-foreground">Strengths</h3>
+            </div>
+            <div className="space-y-2">
+              {result.report.strengths.map((s, i) => (
+                <div key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 mt-1.5 flex-shrink-0" />
+                  {s}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="glass-card rounded-3xl p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle className="w-5 h-5 text-red-400" />
+              <h3 className="font-semibold text-foreground">Risks</h3>
+            </div>
+            <div className="space-y-2">
+              {result.report.risks.map((r, i) => (
+                <div key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-400 mt-1.5 flex-shrink-0" />
+                  {r}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -253,7 +283,7 @@ function ResultsContent() {
             New Prediction
           </Link>
         </Button>
-        <Button asChild className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-foreground px-8 py-6 rounded-xl shadow-lg shadow-purple-500/25">
+        <Button asChild className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white px-8 py-6 rounded-xl shadow-lg shadow-purple-500/25">
           <Link href="/analytics">
             View Analytics
             <ArrowRight className="w-5 h-5 ml-2" />

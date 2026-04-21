@@ -70,12 +70,12 @@ export default function HistoryPage() {
           fetch("/api/analyze?limit=100"),
         ])
 
-        if (!predictRes.ok || !analyzeRes.ok) {
-          throw new Error("Failed to load history from server")
-        }
-
-        const predictions: PredictionRecord[] = await predictRes.json()
-        const analyses: AnalysisRecord[] = await analyzeRes.json()
+        const predictions: PredictionRecord[] = predictRes.ok
+          ? await predictRes.json()
+          : []
+        const analyses: AnalysisRecord[] = analyzeRes.ok
+          ? await analyzeRes.json()
+          : []
 
         const normalized: UnifiedHistoryItem[] = [
           ...predictions.map((entry) => ({

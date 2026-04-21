@@ -15,22 +15,26 @@ const options = {
   },
 }
 
-let client: MongoClient
-
 declare global {
-  var _mongoClient: MongoClient | undefined
+  var _mongoClientPromise: Promise<MongoClient> | undefined
 }
 
+let clientPromise: Promise<MongoClient>
+
 if (process.env.NODE_ENV === "development") {
-  if (!global._mongoClient) {
-    global._mongoClient = new MongoClient(uri, options)
+  // In dev, reuse the same connection across hot-reloads
+  if (!global._mongoClientPromise) {
+    const client = new MongoClient(uri, options)
+    global._mongoClientPromise = client.connect()
   }
-  client = global._mongoClient
+  clientPromise = global._mongoClientPromise
 } else {
-  client = new MongoClient(uri, options)
+  // In production, create a new connection per cold start
+  const client = new MongoClient(uri, options)
+  clientPromise = client.connect()
 }
 
 export async function getDb() {
-  await client.connect()
+  const client = await clientPromise
   return client.db(dbName)
 }

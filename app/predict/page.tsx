@@ -87,9 +87,9 @@ export default function PredictPage() {
         },
         body: JSON.stringify({
           funding: parseFloat(formData.funding),
-          teamSize: parseFloat(formData.teamSize),
+          teamSize: parseInt(formData.teamSize, 10),
           marketSize: parseFloat(formData.marketSize),
-          founderExperience: parseFloat(formData.founderExperience),
+          founderExperience: parseInt(formData.founderExperience, 10),
         }),
       })
 
@@ -105,9 +105,9 @@ export default function PredictPage() {
           _id: `local-${Date.now()}`,
           request: {
             funding: parseFloat(formData.funding),
-            teamSize: parseFloat(formData.teamSize),
+            teamSize: parseInt(formData.teamSize, 10),
             marketSize: parseFloat(formData.marketSize),
-            founderExperience: parseFloat(formData.founderExperience),
+            founderExperience: parseInt(formData.founderExperience, 10),
           },
           response: data,
           createdAt: new Date().toISOString(),
@@ -116,12 +116,12 @@ export default function PredictPage() {
       ].slice(0, 5))
 
       // Save prediction to localStorage
-      const history = JSON.parse(localStorage.getItem("predictionHistory") || "[]")
-      history.push({
+      const lsHistory = JSON.parse(localStorage.getItem("predictionHistory") || "[]")
+      lsHistory.push({
         ...data,
         timestamp: new Date().toISOString(),
       })
-      localStorage.setItem("predictionHistory", JSON.stringify(history))
+      localStorage.setItem("predictionHistory", JSON.stringify(lsHistory))
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred")
     } finally {
