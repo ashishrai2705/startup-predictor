@@ -50,6 +50,40 @@ interface Startup {
   red_flags: string
   why_score_reasons: string
   pipeline_stage?: string
+  detailedDescription?: string
+}
+
+// ─── Startup Detailed Descriptions (domain-matched dummy data) ────────────────
+// Keyed by partial lowercase startup name for fuzzy matching.
+const STARTUP_DESCRIPTIONS: Record<string, string> = {
+  quantum: "QuantumDB is building next-generation quantum-optimized database infrastructure designed to handle complex computational workloads. The platform enables enterprises to leverage hybrid quantum-classical systems for faster query resolution. Currently targeting research labs and fintech institutions, the company aims to reduce computation time by up to 60%.",
+  neural: "NeuralPay is reimagining payment processing with AI-driven fraud detection that operates at the inference layer, eliminating false positives by 85% compared to legacy rule engines. Their real-time risk-scoring model is trained on 4B+ cross-border transactions and integrates directly into existing payment stacks via a lightweight SDK.",
+  green: "GreenGrid enables commercial real estate operators to dynamically optimize energy consumption using federated IoT sensors and reinforcement learning. The platform has already reduced electricity costs by an average of 34% across 120+ enterprise deployments, with a clear expansion roadmap into Southeast Asian smart-city projects.",
+  med: "MedScript uses multimodal LLMs to generate, review, and auto-update clinical documentation in real time, cutting physician admin time by 3 hours per shift. Fully HIPAA-compliant and currently live in 6 hospital networks, the system integrates with major EHR platforms including Epic and Cerner with zero workflow disruption.",
+  agri: "AgriSense deploys satellite imagery combined with edge-compute crop-health models to give smallholder farmers in emerging markets precision-agriculture insights previously only available to industrial operations. The company's pay-as-you-harvest model has achieved 92% retention and is scaling across sub-Saharan Africa and South Asia.",
+  finflow: "FinFlow provides embedded BNPL and micro-credit infrastructure for B2B SaaS vendors, enabling their SME customers to finance subscriptions and tooling without traditional credit checks. Powered by alternative data scoring, FinFlow has achieved a sub-2% default rate while processing $18M in GMV since launch.",
+  edu: "EduChain is building a decentralized credential verification network that lets employers instantly validate academic and professional qualifications, eliminating credential fraud at scale. Partnered with 40+ universities and 200+ enterprise HR departments, the platform has verified over 500,000 credentials with sub-second response times.",
+  logix: "LogiX leverages predictive route-optimization AI and autonomous last-mile delivery pods to cut urban logistics costs by up to 40%. With existing partnerships across three Tier-1 logistics carriers and a proprietary hardware-software stack, LogiX is positioned to capture the rapidly growing $120B urban delivery market.",
+  cypher: "CypherShield provides zero-trust network access and continuous threat-exposure management for mid-market companies that cannot afford enterprise-grade SOC teams. Their autonomous threat-remediation engine resolves 78% of detected incidents without human intervention, delivering Fortune-500-level security at SMB-friendly pricing.",
+  saas: "SaaSFlow is a revenue-intelligence platform built for B2B SaaS CFOs, combining product-usage telemetry, CRM signals, and financial data to predict churn 90 days in advance and surface upsell opportunities with 88% accuracy. Integrated with Salesforce, HubSpot, and Stripe, the platform currently manages $230M in ARR across its customer base.",
+  default: "This startup is leveraging cutting-edge technology and a data-driven approach to solve a significant market problem. With a strong founding team, proven early traction, and a clear path to scale, the company represents a compelling investment opportunity in a growing sector with defensible competitive moats.",
+}
+
+function getDescription(name: string): string {
+  const lower = name.toLowerCase()
+  for (const [key, desc] of Object.entries(STARTUP_DESCRIPTIONS)) {
+    if (lower.includes(key)) return desc
+  }
+  // Deterministic fallback using first letter to vary text slightly
+  const idx = name.charCodeAt(0) % 5
+  const fallbacks = [
+    "This startup is harnessing proprietary AI models and a first-principles product approach to disrupt a multi-billion dollar incumbent market. The founding team brings deep domain expertise and the platform has already demonstrated strong PMF through enterprise pilot contracts.",
+    "Built on a foundation of real-world R&D and validated by early enterprise design-partners, this company is solving a high-friction workflow problem that costs the industry billions annually. Their defensible IP and recurring revenue model make it a standout in the current deal flow.",
+    "This team is executing on a well-defined go-to-market motion with a land-and-expand SaaS strategy that has achieved impressive net revenue retention. Their AI-native architecture gives them a structural cost advantage over legacy competitors who would need multi-year migrations to compete.",
+    "Operating in a sector undergoing rapid regulatory and technological change, this startup is uniquely positioned to capture first-mover advantage. With a proven pilot program, strong unit economics, and a seasoned founding team, the company is ready for institutional capital to accelerate scale.",
+    "The company's platform addresses a mission-critical pain point for its target customers, resulting in high switching costs and strong retention metrics. Their data network effect creates compounding value with each new customer, widening the moat as they grow.",
+  ]
+  return fallbacks[idx]
 }
 
 interface DashboardStats {
@@ -381,6 +415,16 @@ function StartupCard({
         </div>
       </div>
 
+      {/* 4b. DETAILED OVERVIEW — appended, no existing elements changed */}
+      <div className="rounded-xl bg-white/[0.025] border border-white/8 p-3">
+        <div className="flex items-center gap-1.5 text-cyan-300/80 text-[10px] uppercase font-bold tracking-widest mb-2">
+          <Building2 className="w-3.5 h-3.5" /> Detailed Overview
+        </div>
+        <p className="text-[11px] text-white/55 leading-relaxed line-clamp-4">
+          {startup.detailedDescription ?? getDescription(startup.name)}
+        </p>
+      </div>
+
       {/* 5. DECISION ACTIONS */}
       <div className="grid grid-cols-4 gap-2 mt-auto">
         <button
@@ -479,7 +523,12 @@ export default function InvestorDashboardPage() {
       const res = await fetch(`/api/investor/startups?${params}`)
       if (!res.ok) throw new Error("Failed to fetch startups")
       const data = await res.json()
-      setStartups(data)
+      // Inject detailed descriptions client-side without altering the API response shape
+      const enriched = (data as Startup[]).map((s) => ({
+        ...s,
+        detailedDescription: getDescription(s.name),
+      }))
+      setStartups(enriched)
     } catch {
       toast.error("Failed to load startup feed")
     } finally {
@@ -532,19 +581,46 @@ export default function InvestorDashboardPage() {
     if (!investorId) return
     const key = `save-${startup.id}`
     setActionLoading(key, true)
+
+    // Optimistic UI update
+    const willBeSaved = !startup.is_saved
+    setStartups((prev) => prev.map((s) => s.id === startup.id ? { ...s, is_saved: willBeSaved } : s))
+    if (selectedStartup?.id === startup.id) setSelectedStartup((p) => p ? { ...p, is_saved: willBeSaved } : p)
+
     try {
-      const res = await fetch("/api/investor/save", {
+      // 1. Persist to ML service (existing behavior)
+      const mlRes = await fetch("/api/investor/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ investor_id: investorId, startup_id: startup.id }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-      setStartups((prev) => prev.map((s) => s.id === startup.id ? { ...s, is_saved: data.saved } : s))
-      if (selectedStartup?.id === startup.id) setSelectedStartup((p) => p ? { ...p, is_saved: data.saved } : p)
-      toast.success(data.message, { icon: data.saved ? "🔖" : "✕" })
+      const mlData = await mlRes.json()
+      if (!mlRes.ok) throw new Error(mlData.error)
+
+      // Sync UI with server truth (in case optimistic was wrong)
+      setStartups((prev) => prev.map((s) => s.id === startup.id ? { ...s, is_saved: mlData.saved } : s))
+      if (selectedStartup?.id === startup.id) setSelectedStartup((p) => p ? { ...p, is_saved: mlData.saved } : p)
+
+      // 2. Also persist to MongoDB saved_posts collection
+      await fetch("/api/save-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: investorId,
+          postId: startup.id,
+          startupData: {
+            ...startup,
+            detailedDescription: startup.detailedDescription ?? getDescription(startup.name),
+          },
+        }),
+      })
+
+      toast.success(mlData.message, { icon: mlData.saved ? "🔖" : "✕" })
       fetchStats()
     } catch {
+      // Revert optimistic update on failure
+      setStartups((prev) => prev.map((s) => s.id === startup.id ? { ...s, is_saved: !willBeSaved } : s))
+      if (selectedStartup?.id === startup.id) setSelectedStartup((p) => p ? { ...p, is_saved: !willBeSaved } : p)
       toast.error("Failed to save. Is the ML service running?")
     } finally {
       setActionLoading(key, false)
